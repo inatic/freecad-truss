@@ -503,8 +503,8 @@ LinuxCNC will be used as controller to process each of the beams in the CNC mach
 
 # RESOURCES
 
-[FreeCAD file format](https://wiki.freecadweb.org/File_Format_FCStd)
-[FeaturePython Demo part 1](https://wiki.freecadweb.org/Create_a_FeaturePython_object_part_I)
-[FeaturePython Demo part 2](https://wiki.freecadweb.org/Create_a_FeaturePython_object_part_II)
-[Yorik's book](https://yorikvanhavre.gitbooks.io/a-freecad-manual/content/python_scripting/creating_parametric_objects.html)
-[Powerusers hub](https://wiki.freecadweb.org/index.php?title=Power_users_hub)
+* [FreeCAD file format](https://wiki.freecadweb.org/File_Format_FCStd)
+* [FeaturePython Demo part 1](https://wiki.freecadweb.org/Create_a_FeaturePython_object_part_I)
+* [FeaturePython Demo part 2](https://wiki.freecadweb.org/Create_a_FeaturePython_object_part_II)
+* [Yorik's book](https://yorikvanhavre.gitbooks.io/a-freecad-manual/content/python_scripting/creating_parametric_objects.html)
+* [Powerusers hub](https://wiki.freecadweb.org/index.php?title=Power_users_hub)
