@@ -26,7 +26,7 @@ Designing the beam itself will be one of the more straightforward steps in the p
 
 A built-in Python console (available under **View | Panels | Python Console**) allows for interacting with the application and this is where we will be testing most of our code. The latter is stored in FreeCAD's macro directory, which will differ depending on your operating system. Keep in mind that code needs to be imported each time a change is made, and that repeating the original `import` statement will not do this. The `reload` function of the `importlib` library can be used for this instead.
 
-```
+```python
 from Truss import beam
 import importlib
 importlib.reload(beam)
@@ -38,7 +38,7 @@ The basic FreeCAD application is mainly concerned with opening documents, saving
 
 The following command gives an overview of the object types supported by a document, though appropriate modules might need to be loaded for their respective object types to become available:
 
-```
+```python
 import Part
 import Mesh
 doc = FreeCAD.newDocument()
@@ -49,7 +49,7 @@ doc.supportedTypes()
 
 In interesting capability of FreeCAD is that it allows for creating objects according to your own custom Python script. The latter can take care of adding properties to the object, generating shapes, providing functionality for making changes to those shapes, and much more, in fact anything that can be done in Python and with the Python libraries available on the system. 
 
-```
+```python
 import FreeCAD
 doc = FreeCAD.newDocument()
 beam = doc.addObject("Part::FeaturePython", "Beam")
@@ -58,7 +58,7 @@ beam.addProperty("App::PropertyLength", "Length").Length = 1000.0
 
 Should you unzip the FreeCAD document and open the `Document.xml` file it contains, above commands should have created something like the following XML-structured description::
 
-```
+```xml
 <Document SchemaVersion="4">
    <Objects Count="1">
       <Object type="Part::FeaturePython" name="Beam" />
@@ -121,7 +121,7 @@ class ViewProvider():
 
 It takes a couple of steps to add a beam to a document: first check if there is an active document and create one if there isn't, add a `Part::FeaturePython` object to this document, assign the Python script to the latter, recompute the document for changes to take effect, and add a ViewProvider to the object in order to show the shape on screen. Before assigning to the `ViewObject` you'll need to make sure the FreeCAD Gui is actually up, otherwise the ViewObject attribute will not be available. Below convenience function takes care of these steps:
 
-``` beam.py
+``` Beam.py
 import FreeCAD
 from Truss import BeamGui
 
@@ -147,7 +147,7 @@ This type of joint primarily has two features that require milling, a mortise ho
 
 The shapes of the mortise hole, tenon tongue or dowel hole are determined by a number of properties that are stored on the FreeCAD object, in order that they may be saved in the FreeCAD document. Both the hole and the stock have their own length and width, they share a depth parameter. Features are modelled at the origin and in a default (temporary) orientation, after which they are moved and rotated to their proper position. The latter is determined by a position, a normal and a direction vector. The reason for features being modelled at the origin is that the default `PathAdative` operation expects them to be oriented along the positive Z-axis, so its easier to just generate the path there and move it afterwards. Moving is done using the object's `Placement` matrix. The mortise hole is cut out of the stock, and the resulting shape used to cut tenon tongues at the ends of the beam. The tenon tongue shape is used to cut mortise holes in the sides of the beam, and the dowel hole still needs to be implemented. An `OperationExists` property is used to keep track of whether the adaptive milling operation was already created. Because the milling operation links to properties of the mortise object, it is automatically recalculated when any of these properties are modified. 
 
-```
+``` Mortise.py
 class Mortise():
     """ Create a mortise and tenon joint"""
     def __init__(self, obj):
@@ -182,7 +182,7 @@ class Mortise():
 
 Separate methods take care of creating the shape of the hole and of the stock, the former having the shape of two semi-circles connected by lines, and the latter that of a simple rectangle. Both methods return a tuple of a face and a shape. The face is used to generate an adaptive toolpath using the `PathAdaptive` script, and the latter is used to cut features out of the solid beam shape.
 
-```
+``` Mortise.py
     def getHoleShape(self, obj):
         "Return temporary shape created at the origin and in a default orientation"
 
@@ -228,7 +228,7 @@ Separate methods take care of creating the shape of the hole and of the stock, t
 
 The `Mortise` object's `execute` method then takes care of generating the required shapes, cutting the hole out of the stock, and assigning the appropriate shape to the object's `Shape` property depending on whether it is a hole or a tongue. The object's `Placement` attribute takes care of putting the joint component in the proper location and giving it the proper orientation. The last call adds an adaptive milling operation for this feature to the document, it will be discussed in the next section.
 
-```
+``` Mortise.py
     def execute(self, obj):
         "Executed on document recomputes"
 
@@ -256,7 +256,7 @@ The `Mortise` object's `execute` method then takes care of generating the requir
 
 A separate method again takes care of adding a couple of mortises to a document and is used for testing. By having a `test` method in the same script one can simply make changes, import the script again with `importlib.reload` and create features using the test method. Reloading a script only applies to the script itself, dependencies are not reloaded, so if the test script would be separate a reload would not apply to the script you're working on. After checking for an active document, below `test` method creates a list of tuples, with each tuple containing properties defining a feature. `Mortise` objects are then created for each feature description and added to the document, after which they are fused together and returned. The fusion makes it each to cut all features from a beam shape.
 
-```
+``` Mortise.py
 def test():
     """ Add some mortises to a document, for testing """
 
@@ -312,7 +312,7 @@ The `PathAdaptive` script is used for creating toolpaths, but it will be somewha
 
 The operation furthermore has a number of properties like `Side` and `OperationType` that are passed to the `Adaptive2d` method of the `libarea` library. Then, `AdaptiveInputState` and `AdaptiveOutputState` properties are there for debugging. The rest of the properties are used for generating GCode, namely those that should normally be on the toolcontroller, as well as heights and clearances, which are typically defined on the `PathOp` object from which all Path operation inherit. For the sake of simplicity they are currently also contained in this custom `PathAdaptive` script.
 
-```
+``` PathAdaptive.py
 class PathAdaptive():
     """
     Create an adaptive milling operation
@@ -360,7 +360,7 @@ class PathAdaptive():
 
 From the feature object (e.g. the `Mortise`) we are assigning faces to the `PathAdaptive` class, one for `Base` and another for `Stock`, and these are stored in an `App::PropertyLinkSub` property. The object linked to in this case is the feature (e.g. a `Mortise`), and the subshapes are faces stored on the object, in this case a `HoleFace` and a `StockFace`. Assignment to the `App::PropertyLinkSub` property is done in the form of a tuple containing the object and a list of attributes on this object, the attributes being faces in our case. Unpacking this tuple to get at the faces can be done using the Python `getattr` method. 
 
-```
+``` PathAdaptive.py
 # assign to App::PropertyLinkSub property
 objectAdaptive.Base = (obj, ['HoleFace'])
 objectAdaptive.Stock = (obj, ['StockFace'])
@@ -372,7 +372,7 @@ stock = getattr(obj.Stock[0], obj.Stock[1][0])
 
 The geometry of these `base` and `stock` faces are passed to the `Adaptive2d` class provided by `libarea`. For this they need to be converted from regular faces created by the `Part` workbench to what the `Adaptive2d` class expects, which is a lists of edges, each edges being represented as a list of points, and each point in turn being a list of an x- and a y-coordinate. What is refered to as a path in the `Adaptive2d` class would look something like the following:
 
-```
+```python
 path = [edge, edge, edge]
 edge = [point, point, point]
 point = [x,y]
@@ -380,7 +380,7 @@ point = [x,y]
 
 You can inspect these `Adaptive2d` input paths by opening the `Pocket.Fcstd` file and inspecting `geometry` and `stockGeometry` attributes of the `AdaptiveInputState` property of the operation.
 
-```
+```python
 doc = FreeCAD.ActiveDocument
 ada = doc.getObject('Adaptive')
 base = ada.AdaptiveInputState['geometry']
@@ -389,7 +389,7 @@ stock = ada.AdaptiveInputState['stockGeometry']
 
 The following method converts a face, or any kind of shape having a list of `Edges` as attribute (e.g. a wire), into a 2d path. It goes through the edges of the shape and uses the `discretize` method to turn each edge into a list of points. These points have [x,y,z] coordinates of which we only need [x,y], so only those are added to the `points2d` list.
 
-```
+``` PathAdaptive.py
 def shapeToPath2d(shape, deflection=0.0001):
     """
     Accepts a shape as input (face, wire ...) and returns a 2d path. 
@@ -410,7 +410,7 @@ def shapeToPath2d(shape, deflection=0.0001):
 
 The `execute` method of the object is executed each time one of the properties changes or on a `recompute`, both those set on the object itself and those linking to other objects. It starts by collection a number of parameters for the `area.Adaptive2d` operation, amongst others the base and stock faces. These are converted using above `shapeToPath2d` method. A lower limit is also set on the tolerance passed to the operation, and an operation type is assigned by joining `OperationType` and `Side` strings, using the result to fetch the appropriate operation type attribute as defined in the `area` module.
 
-```
+``` PathAdaptive.py
 baseFace = getattr(obj.Base[0], obj.Base[1][0])
 stockFace = getattr(obj.Stock[0], obj.Stock[1][0])
 basePath2d = shapeToPath2d(baseFace)
@@ -424,7 +424,7 @@ operationType = getattr(area.AdaptiveOperationType, operationTypeString)
 
 Input parameters are subsequently collected on a dictionary (`inputStateObject`) so they can be compared between executions. If nothing changed in respect to the previous input state (`obj.AdaptiveInputState`) for the `area.Adaptive2d` operation, it does not need to be executed again and the previous results of the operation (`obj.AdaptiveOutputState`) can be used instead. A manual recompute or a change of parameter that does not affect the 2d path (e.g. a height or tool parameter) might have caused the execution.
 
-```
+``` PathAdaptive.py
 inputStateObject = {
     "tool": float(obj.ToolDiameter),
     "tolerance": float(obj.Tolerance),
@@ -442,7 +442,7 @@ inputStateObject = {
 
 If something changed in the operation's input state, checked by comparing the previous and the current input state, or if there is no previous output state, the `area.Adaptive2d` operation will be executed.
 
-```
+``` PathAdaptive.py
 if json.dumps(obj.AdaptiveInputState) != json.dumps(inputStateObject):
      adaptiveResults = None
 
@@ -456,7 +456,7 @@ else:
 
 While the `area.Adaptive2d` is executing it returns paths to a progress function while these are being calculated, this so a user can follow progress on screen. The progress function also provides the possibility to stop execution by setting `True` as its return value. Drawing on screen should only be done when the FreeCAD Gui is up, and the responsiblity for progress being drawn on screen probably passed to the the `PathAdaptiveGui` script. For now the progress function is defined on the `PathAdaptive` object and simply returns `False`.
 
-```
+``` PathAdaptive.py
 def progressFn(self, tpaths):
     """ Progress callback function, will stop processing of area.Adaptive2d operation when returning True """
 
@@ -469,7 +469,7 @@ def progressFn(self, tpaths):
 
 An `area.Adaptive2d` object is prepared and its attributes are assigned, after which the operation can be executed. The progress callback function (`progressFn`) is fed the toolpaths as they are being generated. Then the results of the operation are added to a list, with each result containing a start point for the helix entering the material, a start point for the adaptive operation, the 2d path of the adaptive operation which consists in a list of [x,y] coordinates, and a return motion type (still need to find out what that is.
 
-```
+``` PathAdaptive.py
 if adaptiveResults == None:
     a2d = area.Adaptive2d()
     a2d.stepOverFactor = 0.01*obj.StepOver
