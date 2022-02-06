@@ -505,7 +505,7 @@ depth_params = PathUtils.depth_params(
 
 Processing then loops through each of the pass depths and subsequently through each of the regions, meaning that all regions are milled to a given depth before proceding to the next depth. As mentioned before, the operation first plunges into the material using a helical path, after which it proceeds with the adaptive toolpath. The `area.Adaptive2d` operation provides a center and a start point for the helix of each region. It is possible to feed multiple faces or wires into the operation, but in our case we only have a single region. To know how many helical revolutions are necessary to reach the desired depth (`StepDown` of `FinishStep`), the depth per revolution needs to be known. This can be calculated from the circumference of the helix (seeing it as a circle) and the angle at which it descends, available from the `HelixAngle` property on the `PathAdaptive` object. If we take the length of this circumference and pull it straight to make it the base of a triangle, and let the `HelixAngle` be the angle of the adjoining corner, the law of tangents can be used to calculate the depth per revolution. Divide the depth of the pass by the depth per revolution, and you have the number of revolutions for the pass.
 
-![Parameters of the helix toolpath]<img src="./images/helix.svg">
+![Parameters of the helix toolpath](./images/helix.svg)
 
 
 ``` PathAdaptive.py
