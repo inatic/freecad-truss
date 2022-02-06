@@ -403,7 +403,7 @@ def shapeToPath2d(shape, deflection=0.0001):
 
 ## OPERATION INPUTS
 
-The `execute` method of the object is executed each time one of the properties changes or on a `recompute`, both those set on the object itself and those linking to other objects. It starts by collection a number of parameters for the `area.Adaptive2d` operation, amongst others the base and stock faces. These are converted using above `shapeToPath2d` method. A lower limit is also set on the tolerance passed to the operation, and an operation type is assigned by joining `OperationType` and `Side` strings, using the result to fetch the appropriate operation type attribute as defined in the `area` module.
+The `execute` method of the `PathAdaptive` object is executed each time one of its properties changes or on a `recompute`. It starts by collecting a number of parameters for the `area.Adaptive2d` operation, amongst others the base and stock faces. These are then converted using above `shapeToPath2d` method. 
 
 ``` PathAdaptive.py
 baseFace = getattr(obj.Base[0], obj.Base[1][0])
@@ -411,13 +411,11 @@ stockFace = getattr(obj.Stock[0], obj.Stock[1][0])
 basePath2d = shapeToPath2d(baseFace)
 stockPath2d = shapeToPath2d(stockFace)
 
-if obj.Tolerance<0.001: obj.Tolerance=0.001
-
 operationTypeString = obj.OperationType + obj.Side
 operationType = getattr(area.AdaptiveOperationType, operationTypeString)
 ```
 
-Input parameters are subsequently collected on a dictionary (`inputStateObject`) so they can be compared between executions. If nothing changed in respect to the previous input state (`obj.AdaptiveInputState`) for the `area.Adaptive2d` operation, it does not need to be executed again and the previous results of the operation (`obj.AdaptiveOutputState`) can be used instead. A manual recompute or a change of parameter that does not affect the 2d path (e.g. a height or tool parameter) might have caused the execution.
+Input parameters are subsequently collected on a dictionary (`inputStateObject`) so they can be compared between executions, and also to help debugging the operation. If nothing changed in respect to the previous input state (`obj.AdaptiveInputState`) for the `area.Adaptive2d` operation, it does not need to be executed again and the previous results of the operation (`obj.AdaptiveOutputState`) can be used instead. A manual recompute or a change of parameter that does not affect the 2d path (e.g. a height, tool speed or feed) might have caused the execution.
 
 ``` PathAdaptive.py
 inputStateObject = {
@@ -427,7 +425,7 @@ inputStateObject = {
     "stockGeometry": stockPath2d,
     "stepover" : float(obj.StepOver),
     "effectiveHelixDiameter": float(obj.HelixDiameterLimit.Value),
-    "operationType": operationTypeString,
+    "operationType": obj.OperationType + obj.Side,
     "side": obj.Side,
     "forceInsideOut" : obj.ForceInsideOut,
     "keepToolDownRatio": obj.KeepToolDownRatio.Value,
@@ -435,7 +433,7 @@ inputStateObject = {
 }
 ```
 
-If something changed in the operation's input state, checked by comparing the previous and the current input state, or if there is no previous output state, the `area.Adaptive2d` operation will be executed.
+If something changed in the operation's input state (checked by comparing the previous and the current input state) or if there is no previous output state, the `area.Adaptive2d` needs to be executed. This is signalled by setting the `adaptiveResults` to `None`.
 
 ``` PathAdaptive.py
 if json.dumps(obj.AdaptiveInputState) != json.dumps(inputStateObject):
@@ -449,7 +447,7 @@ else:
 
 ## 2D ADAPTIVE PATH
 
-From geometry and parameters fed to `area.Adaptive2d`, the operation will create a 2D adaptive toolpath, which like its input geometry consists in a list of [x,y] coordinates. The operation also provides an entry point for the helix that enters the material, and a startpoint for the adaptive toolpath. While the `area.Adaptive2d` is executing it returns paths to a progress function while these are being calculated, this so a user can follow progress on screen. The progress function also provides the possibility to stop execution by setting `True` as its return value. Drawing on screen should only be done when the FreeCAD Gui is up, and the responsiblity for progress being drawn on screen probably passed to the the `PathAdaptiveGui` script. For now the progress function is defined on the `PathAdaptive` object and simply returns `False`.
+The `area.Adaptive2d` is fed a number of input parameters, followed by a call to its `Execute` method in which also the `stockPath2d` and the `basePath2d` are supplied. The method takes a progress callback function as third argument, it will receive partial toolpaths as they are being generated and is useful for diplaying progress on screen. The progress function can also stop execution by setting its return value to `True`. Drawing on screen should only be done when the FreeCAD Gui is up though, and the responsiblity for progress being drawn on screen should probably be passed to the `PathAdaptiveGui` script. For now the progress function does nothing more than return `False`.
 
 ``` PathAdaptive.py
 def progressFn(self, tpaths):
@@ -462,7 +460,7 @@ def progressFn(self, tpaths):
     return False
 ```
 
-An `area.Adaptive2d` object is prepared and its attributes are assigned, after which the operation can be executed. The progress callback function (`progressFn`) is fed the toolpaths as they are being generated. Then the results of the operation are added to a list, with each result containing a start point for the helix entering the material, a start point for the adaptive operation, the 2d path of the adaptive operation which consists in a list of [x,y] coordinates, and a return motion type (still need to find out what that is.
+The `area.Adaptive2d` class allows setting an `OperationType`, which can be either `ClearingInside`, `ClearingOutside`, `ProfilingInside` or `ProfilingOutside`. These correspond to the `obj.OperationType` and `obj.Side` properties, the strings of which are just concatenated to fetch the appropriate operation type from `area.AdaptiveOperationType`. The operation is started by calling its `Execute` method, updates the `progressFn` with incremental toolpath updates, and returns a list of toolpath objects corresponding to the different milling regions. Each region contains the center (`HelixCenterPoint`) and start point (`StartPoint`) of the helical toolpath used to plunge into the material, and a 2D toolpath to adaptively remove material at this depth, which like the input paths of the adaptive operation consists in a list of [x,y] coordinates. Returned `result` objects are converted to dictionaries so they can be stored on the `AdaptiveOutputState` property of the FreeCAD object.
 
 ``` PathAdaptive.py
 if adaptiveResults == None:
@@ -474,7 +472,7 @@ if adaptiveResults == None:
     a2d.stockToLeave = float(obj.StockToLeave)
     a2d.tolerance = float(obj.Tolerance)
     a2d.forceInsideOut = obj.ForceInsideOut
-    a2d.opType = operationType
+    a2d.opType = getattr(area.AdaptiveOperationType, obj.OperationType + obj.Side)
     #EXECUTE
     results = a2d.Execute(stockPath2d, basePath2d, self.progressFn)
 
@@ -506,7 +504,6 @@ depth_params = PathUtils.depth_params(
 Processing then loops through each of the pass depths and subsequently through each of the regions, meaning that all regions are milled to a given depth before proceding to the next depth. As mentioned before, the operation first plunges into the material using a helical path, after which it proceeds with the adaptive toolpath. The `area.Adaptive2d` operation provides a center and a start point for the helix of each region. It is possible to feed multiple faces or wires into the operation, but in our case we only have a single region. To know how many helical revolutions are necessary to reach the desired depth (`StepDown` of `FinishStep`), the depth per revolution needs to be known. This can be calculated from the circumference of the helix (seeing it as a circle) and the angle at which it descends, available from the `HelixAngle` property on the `PathAdaptive` object. If we take the length of this circumference and pull it straight to make it the base of a triangle, and let the `HelixAngle` be the angle of the adjoining corner, the law of tangents can be used to calculate the depth per revolution. Divide the depth of the pass by the depth per revolution, and you have the number of revolutions for the pass.
 
 ![Parameters of the helix toolpath](./images/helix.svg)
-
 
 ``` PathAdaptive.py
 center =  region["HelixCenterPoint"]
