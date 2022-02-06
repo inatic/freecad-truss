@@ -350,7 +350,7 @@ class PathAdaptive():
         obj.addProperty("App::PropertyDistance", "SafeHeight", "Heights", "").SafeHeight = 0
         obj.addProperty("App::PropertyDistance", "StartDepth", "Heights", "").StartDepth = 0
         obj.addProperty("App::PropertyDistance", "StepDown", "Heights", "").StepDown = 0
-        obj.addProperty("App::PropertyDistance", "FinishDepth", "Heights", "").FinishDepth = 0
+        obj.addProperty("App::PropertyDistance", "FinishStep", "Heights", "").FinishStep = 0
         obj.addProperty("App::PropertyDistance", "FinalDepth", "Heights", "").FinalDepth = 0
 
         obj.Proxy = self
@@ -358,7 +358,7 @@ class PathAdaptive():
 
 ## CONVERT FACES TO PATHS
 
-From the feature object (e.g. the `Mortise`) we are assigning faces to the `PathAdaptive` class, one for `Base` and another for `Stock`, and these are stored in an `App::PropertyLinkSub` property. The object linked to in this case is the feature (e.g. a `Mortise`), and the subshapes are faces stored on the object, in this case a `HoleFace` and a `StockFace`. Assignment to the `App::PropertyLinkSub` property is done in the form of a tuple containing the object and a list of attributes on this object, the attributes being faces in our case. Unpacking this tuple to get at the faces can be done using the Python `getattr` method. 
+From the feature object (e.g. the `Mortise`) we are assigning faces to the `PathAdaptive` class, one for `Base` and another for `Stock`, these are stored in an `App::PropertyLinkSub` property. The object linked to in this case is the feature (e.g. a `Mortise`), and the subshapes are faces stored on the object, in this case a `HoleFace` and a `StockFace`. Assignment to the `App::PropertyLinkSub` property is done in the form of a tuple containing the object and a list of its attributes, the latter being faces in our case. Unpacking the tuple to get at the faces can be done using the Python `getattr` method. 
 
 ``` PathAdaptive.py
 # assign to App::PropertyLinkSub property
@@ -370,7 +370,7 @@ base = getattr(obj.Base[0], obj.Base[1][0])
 stock = getattr(obj.Stock[0], obj.Stock[1][0])
 ```
 
-The geometry of these `base` and `stock` faces are passed to the `Adaptive2d` class provided by `libarea`. For this they need to be converted from regular faces created by the `Part` workbench to what the `Adaptive2d` class expects, which is a lists of edges, each edges being represented as a list of points, and each point in turn being a list of an x- and a y-coordinate. What is refered to as a path in the `Adaptive2d` class would look something like the following:
+The geometry of `base` and `stock` faces needs to be passed to the `Adaptive2d` class provided by `libarea`. This requires conversion from regular `Part` faces to what the `Adaptive2d` class expects, which is a lists of edges, each edges being represented as a list of points, and each point in turn being a list of an x- and a y-coordinate. What is refered to as a path in the `Adaptive2d` class would look something like the following:
 
 ```python
 path = [edge, edge, edge]
@@ -387,21 +387,16 @@ base = ada.AdaptiveInputState['geometry']
 stock = ada.AdaptiveInputState['stockGeometry']
 ```
 
-The following method converts a face, or any kind of shape having a list of `Edges` as attribute (e.g. a wire), into a 2d path. It goes through the edges of the shape and uses the `discretize` method to turn each edge into a list of points. These points have [x,y,z] coordinates of which we only need [x,y], so only those are added to the `points2d` list.
+Both `base` and `stock` geometry in our case is a single face, which has a single `OuterWire` attribute that can be converted into a single list of points using its `discretize` method. We will thus be able to pass a single edge consisting in a list of nicely ordered coordinate points to the `area.Adaptive2d` class, avoiding any problems that might occur with out of order or reversed edges. When previously passing the `stockPath` as a list of unordered and reversed edges, the operation was returning a different output path than I was expecting, which was the reason for switching to just `discretize` the `OuterWire`. Be careful though that the shape needs to have an `OuterWire` property for the following method to work, something which a `Part.Wire` shape for example does not have. The `discretize` method returns the `OuterWire` as a list of [x,y,z] point coordinates, of which only [x,y] is retained to create the desired 2d path.
 
 ``` PathAdaptive.py
 def shapeToPath2d(shape, deflection=0.0001):
-    """
-    Accepts a shape as input (face, wire ...) and returns a 2d path. 
-    The resulting path consists in a list of edges, with each edge being a list of points, and each point being an [x,y] coordinate.
-    """
-    path2d = list()
-    for edge in shape.Edges:
-        points3d = edge.discretize(Deflection=deflection)  # list of points with x,y,z coordinates
-        points2d = list()                                  # only need x,y coordinates
-        for point in points3d:
-            points2d.append([point[0], point[1]])
-        path2d.append(points2d)
+
+    points3d = shape.OuterWire.discretize(Deflection=deflection)
+    points2d = list()
+    for point in points3d:
+        points2d.append([point[0], point[1]])
+    path2d = [points2d]
 
     return path2d
 ```
@@ -452,9 +447,9 @@ else:
      adaptiveResults = None
 ```
 
-## OPERATION EXECUTION
+## 2D ADAPTIVE PATH
 
-While the `area.Adaptive2d` is executing it returns paths to a progress function while these are being calculated, this so a user can follow progress on screen. The progress function also provides the possibility to stop execution by setting `True` as its return value. Drawing on screen should only be done when the FreeCAD Gui is up, and the responsiblity for progress being drawn on screen probably passed to the the `PathAdaptiveGui` script. For now the progress function is defined on the `PathAdaptive` object and simply returns `False`.
+From geometry and parameters fed to `area.Adaptive2d`, the operation will create a 2D adaptive toolpath, which like its input geometry consists in a list of [x,y] coordinates. The operation also provides an entry point for the helix that enters the material, and a startpoint for the adaptive toolpath. While the `area.Adaptive2d` is executing it returns paths to a progress function while these are being calculated, this so a user can follow progress on screen. The progress function also provides the possibility to stop execution by setting `True` as its return value. Drawing on screen should only be done when the FreeCAD Gui is up, and the responsiblity for progress being drawn on screen probably passed to the the `PathAdaptiveGui` script. For now the progress function is defined on the `PathAdaptive` object and simply returns `False`.
 
 ``` PathAdaptive.py
 def progressFn(self, tpaths):
@@ -495,6 +490,45 @@ if adaptiveResults == None:
 
 ## GCODE GENERATION
 
+Above `area.Adaptive2d` operation provides a 2d path, so depending on the depth of the feature this toolpath will need to be repeated on multiple depths. The GCode generated in this step procedes as follows: it creates a helix toolpath for entering the material to a specified depth, then uses the adaptive toolpath to clear away material at that depth, after which it creates another helix to plunge deeper into the material to the next depth, and again uses the adaptive toolpath to clear away material, continuing to the final depth of the feature. For the final pass one can set the amount of material to remove with the `FinishStep` property. We'll start off by generating these subsequent depths by using a script of the `Path` toolbench named `PathUtils` and the `depth_params` class it provides. This class implements an iterator that returns subsequent machining depths. 
+
+``` PathAdaptive.py
+depth_params = PathUtils.depth_params(
+   clearance_height = obj.ClearanceHeight.Value,
+   safe_height = obj.SafeHeight.Value,
+   start_depth = obj.StartDepth.Value,
+   step_down = obj.StepDown.Value,
+   z_finish_step = obj.FinishStep.Value,
+   final_depth = obj.FinalDepth.Value,
+   user_depths=None)
+```
+
+Processing then loops through each of the pass depths and subsequently through each of the regions, meaning that all regions are milled to a given depth before proceding to the next depth. As mentioned before, the operation first plunges into the material using a helical path, after which it proceeds with the adaptive toolpath. The `area.Adaptive2d` operation provides a center and a start point for the helix of each region. It is possible to feed multiple faces or wires into the operation, but in our case we only have a single region. To know how many helical revolutions are necessary to reach the desired depth (`StepDown` of `FinishStep`), the depth per revolution needs to be known. This can be calculated from the circumference of the helix (seeing it as a circle) and the angle at which it descends, available from the `HelixAngle` property on the `PathAdaptive` object. If we take the length of this circumference and pull it straight to make it the base of a triangle, and let the `HelixAngle` be the angle of the adjoining corner, the law of tangents can be used to calculate the depth per revolution. Divide the depth of the pass by the depth per revolution, and you have the number of revolutions for the pass.
+
+![Parameters of the helix toolpath](./images/helix.svg)<img src="./images/helix.svg">
+
+
+``` PathAdaptive.py
+center =  region["HelixCenterPoint"]
+start =  region["StartPoint"]
+helixRadius = math.sqrt( math.pow( center[0]-start[0], 2) +  math.pow( center[1]-start[1], 2) )
+
+circumference = 2 * math.pi * helixRadius
+helixAngleRadians = math.pi * float(obj.HelixAngle)/180.0
+depthPerRevolution = circumference * math.tan(helixAngleRadians)
+
+maxRadians = (passStartDepth-passEndDepth) / depthPerRevolution * 2 * math.pi
+```
+
+To rotate around the center of the helix we just multiply its radius with cosine and sine of the current angle to respectively get the x- and y-coordinate of the current point. We're however not necessarily starting at an angle of zero radians, our `StartAngle` is determined by the `StartPoint` of the helix. This `StartAngle` is calculated using an `atan2` function, which tells us how much the angle is either behind or ahead the zero angle. So our loop needs to go from `currentRadians` being zero to it reaching `maxRadians`, but for calculating the coordinates of the current point we need to offset for the `StartAngle`. The start of the helix for example is not at `currentRadians` which start at zero, but at `currentRadians + startAngle`.
+
+```
+
+
+
+```
+
+
 # MACHINING THE BEAM
 
 LinuxCNC will be used as controller to process each of the beams in the CNC machine.
@@ -508,3 +542,4 @@ LinuxCNC will be used as controller to process each of the beams in the CNC mach
 * [FeaturePython Demo part 2](https://wiki.freecadweb.org/Create_a_FeaturePython_object_part_II)
 * [Yorik's book](https://yorikvanhavre.gitbooks.io/a-freecad-manual/content/python_scripting/creating_parametric_objects.html)
 * [Powerusers hub](https://wiki.freecadweb.org/index.php?title=Power_users_hub)
+* [Github of the PathAdaptive developer](https://github.com/kreso-t/FreeCAD_Mod_Adaptive_Path)
