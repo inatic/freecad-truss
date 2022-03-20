@@ -1,42 +1,20 @@
-The purpose of this project is to start from a geometric mesh and generate a truss out of wooden beams. Methods for joining the beams would preferably not use any additional fasteners, just features milled out of the wooden stock. The first joinery method being implemented is mortise and tenon, the next candidate being a dovetail joint. The process of going from mesh to truss might look somewhat like the following, though steps will be implemented out of order, tackling the easiest parts first. 
+The following describes a construction technique that uses timber beams and basic joinery techniques (e.g. mortise and tenon) to build complex structures. The design starts from a mesh of interconnected lines that serves as the basis for both the beams and the joinery features used to connect them. Machining instructions are then generated based on the features of each beam. Development is done in FreeCAD, an open-source CAD/CAM package that offers a Python interface for scripting. A Python console (available under **View | Panels | Python Console**) offers direct interaction with the application. Code is stored in the FreeCAD `Macro` directory, the location of which can be found under `FreeCAD | Preferences | General | Macro`.
 
-* designing the mesh - we'll start off using Blender as it is great for modelling meshes, though exact dimensioning might not be as straightforward.
-* determine beam length - each line in the mesh is a beam, joined with neighbouring beams using a number of wood joinery techniques.
-* select joinery technique - a number of techniques like mortise and tenon or dovetail are available for connecting beams.
-* find joint parameters - each joints has a placement and number of other parameters depending on the geometric relation between beams.
-* model beam - a beam with necessary features is generated
-* generate gcode for milling the beam
-* machine beam on CNC machine
+# BEAM
 
-The last three steps will be a good starting point as it is rather straightforward to model a beam and to create some features to be cut on a CNC. Going from the relationship of lines in the mesh to the parameters of a joint will be the next step. Finally some way of selecting which joint to use in which circumstance will be the last step and admittedly the most dificult. Possibly the user will need to make this choice.
-
-You can think of this document as a companion to the project source code and also as a project diary - it will be updated as the project moves along.
-
-# LIMITATIONS
-
-The machinery used for this project will be rather simple and as inexpensive as possible. One feature that most commercial CNC have, an automatic toolchanger, will not be available because it is expensive. Performing manual tool changes will quickly become impractical when machining many beams, so all features are going to be machined with the same tool. This limits the kinds of shape features that can be machined, but as long as this is kept in mind when designing the joints it will not pose much of a problem. It will also be less than ideal with respect to processing time. The tool itself will be a long endmill, and mainly its diameter will put a lower limit on the radius of corners. Beams will be cut to stock size before being fed in the machine because that's a fast and simple operation. 
-
-Another limitation of the CNC machine is that it has no access to the bottom side of the beam. For now it probably is fine just to turn the beam around when it needs processing from the bottom, and correspondingly have every beam generate two GCode files.
-
-# MODELLING THE BEAM
-
-Designing the beam itself will be one of the more straightforward steps in the project. Each beam has a placement that puts it over the corresponding mesh line in the truss document, and along the positive X-axis when modelled as a single beam in an independent document. All modelling will be done in FreeCAD, which is a CAx package that is especially suited for developing custom functionality due to its open-source nature and the possibility to access most features from a Python script and the built-in console.
-
-## CODE DEVELOPMENT
-
-A built-in Python console (available under **View | Panels | Python Console**) allows for interacting with the application and this is where we will be testing most of our code. The latter is stored in FreeCAD's macro directory, which will differ depending on your operating system. Keep in mind that code needs to be imported each time a change is made, and that repeating the original `import` statement will not do this. The `reload` function of the `importlib` library can be used for this instead.
+At creation a `Beam` object is passed a reference to a line in the mesh. It is modelled according to the length of this line and its relationship to adjoining lines. Test code creates an example `Beam` object when the module is imported.
 
 ```python
-from Truss import beam
+from Truss import Beam
 import importlib
-importlib.reload(beam)
+importlib.reload(Beam)
 ```
 
 ## FREECAD OBJECTS
 
-The basic FreeCAD application is mainly concerned with opening documents, saving them, and displaying their content. Other fuctionality is contained in so-called workbenches. The `Part` workbench for example takes care of modelling solid geometry, while the goal of the `Path` workbench is to generate GCode for running on a CNC machine. Each workbench saves its `objects` in the document. These objects are data containers, of which multiple types are available, and attributes can be saved on each object and also stored in the document. Attributes can for example be the length and width of a shape, the radius of a corner, a vector determining the orientation of a shape, etc. Objects are stored in a standard format document (.FCStd), which in fact is nothing more than a ZIP archive that you can extract for having a closer look at its content. It contains, amongst others, an XML file that describes the objects in the document (`Document.xml`). A `GuiDocument.xml` file is also available in the compressed FreeCAD file and contains an XML description of how objects are displayed in the tree view and 3D window of FreeCAD's graphical user interface. It will for example have properties for line color and thickness associated with the objects.
+The basic FreeCAD application is mainly concerned with opening documents, saving them, and displaying their content. Other fuctionality is contained in so-called workbenches. The `Part` workbench for example takes care of modelling solid geometry, while the goal of the `Path` workbench is to generate GCode for running on a CNC machine. Each workbench saves its `objects` in the document. These objects are data containers, of which multiple types are available, and attributes can be saved on each object and also stored in the document. Attributes can for example be the length and width of a shape, the radius of a corner, a vector determining the orientation of a shape, etc. Objects are stored in a standard format document (.FCStd), which in fact is nothing more than a ZIP archive that can be extracted for a closer look at its content. It contains, amongst others, an `Document.xml` file describing the objects in the document, and a `GuiDocument.xml` file detailing how objects are displayed in the tree view and 3D window of FreeCAD's graphical user interface (for example specifying line color and thickness). 
 
-The following command gives an overview of the object types supported by a document, though appropriate modules might need to be loaded for their respective object types to become available:
+The following command gives an overview of the object types supported by a document. Additional modules might first need to be loaded for the object types they add to become available:
 
 ```python
 import Part
@@ -47,7 +25,7 @@ doc.supportedTypes()
 
 ## OBJECT BASED ON A PYTHON SCRIPT
 
-In interesting capability of FreeCAD is that it allows for creating objects according to your own custom Python script. The latter can take care of adding properties to the object, generating shapes, providing functionality for making changes to those shapes, and much more, in fact anything that can be done in Python and with the Python libraries available on the system. 
+In interesting capability of FreeCAD is that it allows for creating objects according to your custom Python script. The latter can take care of adding properties to the object, generating shapes, providing functionality for making changes to those shapes, and more. in fact anything that can be done in Python and with the Python libraries available on the system. 
 
 ```python
 import FreeCAD
@@ -75,11 +53,11 @@ Should you unzip the FreeCAD document and open the `Document.xml` file it contai
 </Document>
 ```
 
-The Python script itself is not stored in the FreeCAD document, but the module and name of the relevant Python class is added to the object's `Proxy` attribute. When the document is opened, FreeCAD expects to find this class in the Pyton search path and takes care of instantiation, after which it is assigned to the `Proxy` attribute on the object so it can be accessed. We will be storing the script in question in the FreeCAD macro directory. Where this directory is on your system can be found from FreeCAD's drop-down menu at the top of the application by clicking through to FreeCAD | Preferences | General | Macro.
+The Python script itself is not stored in the FreeCAD document, but the module and name of the relevant Python class is added to the object's `Proxy` attribute. When the document is opened, FreeCAD expects to find this class in the Pyton search path and takes care of instantiation, after which it is assigned to the `Proxy` attribute on the object so it can be accessed.
 
 ## BASIC BEAM MODEL
 
-Creating a parametric beam shape using a Python script isn't very difficult. Each beam has a couple of basic properties being length, width and height, which are created on the object and will thus be stored in the document. The `Part` workbench comes with a `makeBox` function that can be used to create the final shape. The `FeaturePython` object is passed as an argument when instantiating a beam object. This allows setting properties directly on the object as well as assigning the class instance itself to the `Proxy` attribute. If a property of the object is modified FreeCAD reacts to this by running the `execute` method on the object's `Proxy` attribute.
+Creating a parametric beam shape using a Python script isn't very difficult. Each beam has a couple of basic properties being length, width and height, which are created on the object and will thus be stored in the document. The `Part` workbench comes with a `makeBox` function that can be used to create the beam shape. The `FeaturePython` object is passed as an argument when instantiating a beam object. This allows setting properties directly on the object and assigning the class instance itself to the `Proxy` attribute. If a property of the object is modified, FreeCAD reacts by running the `execute` method on the object's `Proxy` attribute.
 
 ``` Beam.py
 import Part
@@ -137,15 +115,15 @@ def test(obj_name):
     return obj
 ```
 
-# JOINT FEATURES
+# JOINTS
 
-Each beam needs to have some machining done in order to fit its neighbouring beams. The location, orientation and other properties of each joint are calculated from the geometry of the original mesh. Each beam has its own coordinate system consisting in an origin and 3 direction vectors, based on which joints are positioned and oriented. The beam can thus be moved around without affecting the relative position of its joints. For now two classic joints types will be implemented, a mortise and tenon joint, and a dovetail joint.
+Machining needs to be done before beams can be joined together. The locations, orientations and other properties of joints are calculated from the geometry of the line it references in the mesh. Each beam has its own `uvw` coordinate system which is used to position and orient joints. Therefore the location of the beam can be changed without affecting the relative position of its joints. The mortise and tenon joint is very common in woodworking and will be described next.
 
 ## MORTISE AND TENON JOINT
 
-This type of joint primarily has two features that require milling, a mortise hole and a tenon tongue, and optionally a third feature being a hole to allow for a dowel to keep the assembly together. All three features will be modelled in a single Python class, named `Mortise` for brevity. A `Type` attribute determines if the instance takes the form of a mortise hole, a tenon tongue, or a dowel hole. 
+This type of joint consists in a mortise (hole), a tenon (tongue), and optionally a hole for a dowel to secure the assembly. All features of the mortise and tenon joint are modelled in a single Python class named `Mortise` for brevity. A `Type` attribute specifies if the object generates a mortise, a tenon, or a dowel. For removing material around the tenon the extent of stock dimensions needs to be known, something that is not necessary for creating the mortise. Each mortise has length, width and depth, while stock material has width and height parameters.
 
-The shapes of the mortise hole, tenon tongue or dowel hole are determined by a number of properties that are stored on the FreeCAD object, in order that they may be saved in the FreeCAD document. Both the hole and the stock have their own length and width, they share a depth parameter. Features are modelled at the origin and in a default (temporary) orientation, after which they are moved and rotated to their proper position. The latter is determined by a position, a normal and a direction vector. The reason for features being modelled at the origin is that the default `PathAdative` operation expects them to be oriented along the positive Z-axis, so its easier to just generate the path there and move it afterwards. Moving is done using the object's `Placement` matrix. The mortise hole is cut out of the stock, and the resulting shape used to cut tenon tongues at the ends of the beam. The tenon tongue shape is used to cut mortise holes in the sides of the beam, and the dowel hole still needs to be implemented. An `OperationExists` property is used to keep track of whether the adaptive milling operation was already created. Because the milling operation links to properties of the mortise object, it is automatically recalculated when any of these properties are modified. 
+Features are modelled at the origin and in a default (temporary) orientation, after which they are moved and rotated to their proper position. The latter is determined by a `position`, a `normal` and a `direction` vector. The reason for modelling features at the origin is that the default `PathAdative` operation expects them to be oriented along the positive Z-axis, so its easier to just generate the path there and move it afterwards. Moving is done using the object's `Placement` matrix. The mortise hole is cut out of the stock, and the resulting shape used to cut tenon tongues at the ends of the beam. The tenon tongue shape is used to cut mortise holes in the sides of the beam, and the dowel hole still needs to be implemented. An `OperationExists` property is used to keep track of whether the adaptive milling operation already exists. Because the milling operation links to properties of the mortise object, it is automatically recalculated when any of these properties are modified. 
 
 ``` Mortise.py
 class Mortise():
@@ -155,21 +133,21 @@ class Mortise():
         obj.Proxy = self
 
         obj.addProperty('App::PropertyString', 'Description', 'Base', 'Joint description').Description = "Mortise and tenon joint"
-        obj.addProperty('App::PropertyEnumeration', 'Type', 'Base', 'Joint type').Type = ["hole","tongue"]
-        obj.Type = "hole"
+        obj.addProperty('App::PropertyEnumeration', 'Type', 'Base', 'Joint type').Type = ["mortise","tenon"]
+        obj.Type = "mortise"
 
-        obj.addProperty('App::PropertyLength', 'HoleLength', 'Dimensions', 'Mortise length').HoleLength = '60 mm'
-        obj.addProperty('App::PropertyLength', 'HoleWidth', 'Dimensions', 'Mortise width').HoleWidth = '30 mm'
-        obj.addProperty('App::PropertyLength', 'StockLength', 'Dimensions', 'Stock length').StockLength = '102 mm'
         obj.addProperty('App::PropertyLength', 'StockWidth', 'Dimensions', 'Stock width').StockWidth = '102 mm'
-        obj.addProperty('App::PropertyLength', 'Depth', 'Dimensions', 'Mortise depth').Depth = '60 mm'
+        obj.addProperty('App::PropertyLength', 'StockHeight', 'Dimensions', 'Stock length').StockHeight = '102 mm'
+        obj.addProperty('App::PropertyLength', 'MortiseWidth', 'Dimensions', 'Mortise width').MortiseWidth = '30 mm'
+        obj.addProperty('App::PropertyLength', 'MortiseLength', 'Dimensions', 'Mortise length').MortiseLength = '60 mm'
+        obj.addProperty('App::PropertyLength', 'MortiseDepth', 'Dimensions', 'Mortise depth').MortiseDepth = '60 mm'
+
+        obj.addProperty('Part::PropertyPartShape', 'StockFace', 'Faces', 'Face defining stock')
+        obj.addProperty('Part::PropertyPartShape', 'MortiseFace', 'Faces', 'Face defining feature')
 
         obj.addProperty('App::PropertyVector', 'TemporaryPosition', 'Orientation', 'Temporary mortise position').TemporaryPosition = FreeCAD.Vector(0,0,0)
         obj.addProperty('App::PropertyVector', 'TemporaryNormal', 'Orientation', 'Temporary mortise normal').TemporaryNormal = FreeCAD.Vector(0,0,1)
         obj.addProperty('App::PropertyVector', 'TemporaryDirection', 'Orientation', 'Temporary mortise direction').TemporaryDirection = FreeCAD.Vector(0,1,0)
-
-        obj.addProperty('Part::PropertyPartShape', 'HoleFace', 'Faces', 'Face defining feature')
-        obj.addProperty('Part::PropertyPartShape', 'StockFace', 'Faces', 'Face defining stock')
 
         obj.addProperty('App::PropertyVector', 'Position', 'Orientation', 'Mortise position').Position = FreeCAD.Vector(0,0,0)
         obj.addProperty('App::PropertyVector', 'Normal', 'Orientation', 'Mortise normal').Normal = FreeCAD.Vector(0,0,1)
@@ -180,81 +158,84 @@ class Mortise():
         self.execute(obj)
 ```
 
-Separate methods take care of creating the shape of the hole and of the stock, the former having the shape of two semi-circles connected by lines, and the latter that of a simple rectangle. Both methods return a tuple of a face and a shape. The face is used to generate an adaptive toolpath using the `PathAdaptive` script, and the latter is used to cut features out of the solid beam shape.
+Next method creates a face at the origin and in the XY-plane that represents a section of the beam stock. It is used in the `PathAdaptive` operation and to cut the tenon feature.
 
-``` Mortise.py
-    def getHoleShape(self, obj):
-        "Return temporary shape created at the origin and in a default orientation"
+```
+def getStockFace(self, obj):
+    "Return temporary shape created at the origin and in a default orientation"
 
-        length = obj.HoleLength.Value
-        width = obj.HoleWidth.Value
+    height = obj.StockHeight.Value
+    width = obj.StockWidth.Value
 
-        ## Points in each quadrant
-        point0 = FreeCAD.Vector(+width/2, +length/2-width/2, 0)
-        point1 = FreeCAD.Vector(-width/2, +length/2-width/2, 0)
-        point2 = FreeCAD.Vector(-width/2, -length/2+width/2, 0)
-        point3 = FreeCAD.Vector(+width/2, -length/2+width/2, 0)
+    centerPoint = FreeCAD.Vector(-height/2, -width/2, 0)
+    stockFace = Part.makePlane(height, width, centerPoint)
 
-        line03 = Part.makeLine(point3,point0)
-        line21 = Part.makeLine(point1,point2)
-
-        ## Arcs
-        ### Midpoints
-        point10 = FreeCAD.Vector(0, +length/2, 0)
-        point32 = FreeCAD.Vector(0, -length/2, 0)
-
-        arc10 = Part.Edge(Part.Arc(point1,point10,point0))
-        arc32 = Part.Edge(Part.Arc(point3,point32,point2))
-
-        ## Face and Shape
-        holeWire = Part.Wire([line03,arc32,line21,arc10])
-        holeFace = Part.Face(holeWire)
-        holeShape = holeFace.extrude(-obj.Depth.Value * obj.TemporaryNormal)
-
-        return holeFace, holeShape
-
-    def getStockShape(self, obj):
-        "Return temporary shape created at the origin and in a default orientation"
-
-        length = obj.StockLength.Value
-        width = obj.StockWidth.Value
-
-        centerPoint = FreeCAD.Vector(-length/2, -width/2, 0)
-        stockFace = Part.makePlane(length, width, centerPoint)
-        stockShape = stockFace.extrude(-obj.Depth.Value * obj.TemporaryNormal)
-
-        return stockFace, stockShape
+    return stockFace
 ```
 
-The `Mortise` object's `execute` method then takes care of generating the required shapes, cutting the hole out of the stock, and assigning the appropriate shape to the object's `Shape` property depending on whether it is a hole or a tongue. The object's `Placement` attribute takes care of putting the joint component in the proper location and giving it the proper orientation. The last call adds an adaptive milling operation for this feature to the document, it will be discussed in the next section.
+Similarly a face for the mortise is created at the origin and in the XY-plane. This face is also used as an input for the `PathAdaptive` operation, and to create the shape that cuts a mortise in the beam.
 
-``` Mortise.py
-    def execute(self, obj):
-        "Executed on document recomputes"
+```
+def getMortiseFace(self, obj):
+    "Return face of a mortise, modelled at the origin and in a default orientation"
 
-        holeFace, holeShape = self.getHoleShapes(obj)
-        stockFace, stockShape = self.getStockShapes(obj)
-        obj.HoleFace = holeFace
-        obj.StockFace = stockFace
-        cutoutShape = stockShape.cut(holeShape)
+    length = obj.MortiseLength.Value
+    width = obj.MortiseWidth.Value
 
-        if obj.Type == "hole":
-            obj.Shape = holeShape
-        else:
-            obj.Shape = cutoutShape
+    ## Points in each quadrant
+    point0 = FreeCAD.Vector(+width/2, +length/2-width/2, 0)
+    point1 = FreeCAD.Vector(-width/2, +length/2-width/2, 0)
+    point2 = FreeCAD.Vector(-width/2, -length/2+width/2, 0)
+    point3 = FreeCAD.Vector(+width/2, -length/2+width/2, 0)
 
-        # Placement
-        obj.Placement.Base = obj.Position
-        rotation1 = FreeCAD.Rotation(obj.TemporaryNormal, obj.Normal)
-        rotation2 = FreeCAD.Rotation(obj.TemporaryDirection, obj.Direction)
-        obj.Placement.Rotation = rotation1.multiply(rotation2)
+    line03 = Part.makeLine(point3,point0)
+    line21 = Part.makeLine(point1,point2)
 
-        if not obj.OperationExists:
-            self.addOperation(obj)
-            obj.OperationExists = True
+    ## Arcs
+    ### Midpoints
+    point10 = FreeCAD.Vector(0, +length/2, 0)
+    point32 = FreeCAD.Vector(0, -length/2, 0)
+
+    arc10 = Part.Edge(Part.Arc(point1,point10,point0))
+    arc32 = Part.Edge(Part.Arc(point3,point32,point2))
+
+    ## Face and Shape
+    mortiseWire = Part.Wire([line03,arc32,line21,arc10])
+    mortiseFace = Part.Face(mortiseWire)
+
+    return mortiseFace
 ```
 
-A separate method again takes care of adding a couple of mortises to a document and is used for testing. By having a `test` method in the same script one can simply make changes, import the script again with `importlib.reload` and create features using the test method. Reloading a script only applies to the script itself, dependencies are not reloaded, so if the test script would be separate a reload would not apply to the script you're working on. After checking for an active document, below `test` method creates a list of tuples, with each tuple containing properties defining a feature. `Mortise` objects are then created for each feature description and added to the document, after which they are fused together and returned. The fusion makes it each to cut all features from a beam shape.
+The `Mortise` object's `execute` method takes care of generating the required shapes, cutting mortise out of stock, and assigning the appropriate shape to the object's `Shape` property depending on whether it represents a mortise or a tenon. The object's `Placement` attribute puts the shape in the proper position and orientation. The last call adds an adaptive milling operation for the relevant feature, it will be discussed in the next section.
+
+```python
+def execute(self, obj):
+    "Executed on document recomputes"
+
+    obj.StockFace = self.getStockFace(obj)
+    obj.MortiseFace = self.getMortiseFace(obj)
+    stockShape = obj.StockFace.extrude(-obj.MortiseDepth.Value * obj.TemporaryNormal)
+    mortiseShape = obj.MortiseFace.extrude(-obj.MortiseDepth.Value * obj.TemporaryNormal)
+    cutoutShape = stockShape.cut(mortiseShape)
+
+    if obj.Type == "mortise":
+        obj.Shape = mortiseShape
+    else:
+        obj.Shape = cutoutShape
+
+    # Placement
+    obj.Placement.Base = obj.Position
+    rotation1 = FreeCAD.Rotation(obj.TemporaryNormal, obj.Normal)
+    rotation2 = FreeCAD.Rotation(obj.TemporaryDirection, obj.Direction)
+    obj.Placement.Rotation = rotation1.multiply(rotation2)
+
+    # Create adaptive milling operation
+    if not obj.OperationExists:
+        self.addOperation(obj)
+        obj.OperationExists = True
+```
+
+A separate method takes care of adding a couple of mortises to a FreeCAD document and is used for testing. By having a `test` method in the same script one can simply make changes, import the script again with `importlib.reload` and create features using the test method. Reloading a script only fetches the latest version of the script and not of its dependencies, so reloading a separate test script would not automatically reload the script being tested. After checking for an active document, below `test` method creates a list of tuples, each tuple containing properties defining a feature. `Mortise` objects are then created for each feature and added to the document, after which they are fused and returned. 
 
 ``` Mortise.py
 def test():
@@ -265,7 +246,7 @@ def test():
         document = FreeCAD.newDocument()
 
     # create some features for testing
-    features = [] # orientation = (position, normal, direction, type)
+    features = []
 
     position = FreeCAD.Vector(0,50,50)
     normal = FreeCAD.Vector(-1,0,0)
@@ -304,13 +285,9 @@ def test():
     return objects
 ```
 
-# GENERATING TOOLPATHS
+# PATHADAPTIVE TOOLPATH
 
-The `Path` workbench will take care of generating toolpaths that can be run on a CNC machine. A big advantage of the `Path` workbench, for us at least, is that it was mainly written in Python. This makes it quite straightforward to examine how things work and create customizations.
-
-The `PathAdaptive` script is used for creating toolpaths, but it will be somewhat simplified as I don't understand all the ins and outs of the `Path` workbench yet. Instead of getting information like heights and sizes from model and stock shapes, in this context we can directly assign such properties. The `Adaptive2D` class of `libarea`, which generates 2D toolpaths for the `PathAdaptive` script, accepts `Base` and `Stock` shapes as a list of 2D coordinates. Our custom `PathAdaptive` script will generate these lists from faces defined as properties on the feature objects (e.g. `Mortise`). It is my understanding that the `Adaptive2D` class can deal with multiple faces (or regions) for both `Base` and `Stock`, though I haven't tested this and it's not needed here. Once toolpaths are generated at the origin, they are moved and rotated to the appropriate destination based on the `Placement` matrix of the related feature. This functionality still needs to be added, will start from the GCode and be kept in a separate module.
-
-The operation furthermore has a number of properties like `Side` and `OperationType` that are passed to the `Adaptive2d` method of the `libarea` library. Then, `AdaptiveInputState` and `AdaptiveOutputState` properties are there for debugging. The rest of the properties are used for generating GCode, namely those that should normally be on the toolcontroller, as well as heights and clearances, which are typically defined on the `PathOp` object from which all Path operation inherit. For the sake of simplicity they are currently also contained in this custom `PathAdaptive` script.
+The `Path` workbench takes care of generating toolpaths for controlling a CNC machine. It comes with a `PathAdaptive` script that creates adaptive toolpaths, and in what follows a simplified version of this script is created. The script uses the `Adaptive2D` class of the `libarea` library to generate 2D toolpaths. This class accepts 2D coordinate lists for both the feature that is cut (`Base`) and for the stock from which it is cut (`Stock`). These are generated based on the `MortiseFace` and `StockFace` attributes of the `Mortise` object. In my understanding the `Adaptive2D` class can deal with multiple faces (or regions) for both `Base` and `Stock`, but only one is needed here. Toolpaths are generated at the origin and oriented along the Z-axis, after which they are positioned and oriented using the `Placement` attribute of Mortise object. The `PathAdaptive` operation furthermore defines a number of properties like `Side` and `OperationType` that are passed to the `Adaptive2d` class. The `AdaptiveInputState` and `AdaptiveOutputState` contain the inputs and outputs of the `Adaptive2d` class and are usefull for debugging. A toolcontroller and a number of heights are also added to the object, they are used for generation of toolpath and GCode.
 
 ``` PathAdaptive.py
 class PathAdaptive():
@@ -358,11 +335,11 @@ class PathAdaptive():
 
 ## CONVERT FACES TO PATHS
 
-From the feature object (e.g. the `Mortise`) we are assigning faces to the `PathAdaptive` class, one for `Base` and another for `Stock`, these are stored in an `App::PropertyLinkSub` property. The object linked to in this case is the feature (e.g. a `Mortise`), and the subshapes are faces stored on the object, in this case a `HoleFace` and a `StockFace`. Assignment to the `App::PropertyLinkSub` property is done in the form of a tuple containing the object and a list of its attributes, the latter being faces in our case. Unpacking the tuple to get at the faces can be done using the Python `getattr` method. 
+From the feature object (e.g. the `Mortise`) we are assigning faces to the `PathAdaptive` class, one for `Base` and another for `Stock`, both stored in an `App::PropertyLinkSub` property. The object linked to in this case is the `Mortise`, and the subshapes are faces stored on the object, in this case a `MortiseFace` and a `StockFace`. Assignment to the `App::PropertyLinkSub` property is done in the form of a tuple containing the object and a list of its attributes. Unpacking the tuple to get at the faces can be done using the Python `getattr` method. 
 
 ``` PathAdaptive.py
 # assign to App::PropertyLinkSub property
-objectAdaptive.Base = (obj, ['HoleFace'])
+objectAdaptive.Base = (obj, ['MortiseFace'])
 objectAdaptive.Stock = (obj, ['StockFace'])
 
 # unpack App::PropertyLinkSub property
@@ -370,7 +347,7 @@ base = getattr(obj.Base[0], obj.Base[1][0])
 stock = getattr(obj.Stock[0], obj.Stock[1][0])
 ```
 
-The geometry of `base` and `stock` faces needs to be passed to the `Adaptive2d` class provided by `libarea`. This requires conversion from regular `Part` faces to what the `Adaptive2d` class expects, which is a lists of edges, each edges being represented as a list of points, and each point in turn being a list of an x- and a y-coordinate. What is refered to as a path in the `Adaptive2d` class would look something like the following:
+The geometry of `base` and `stock` faces needs to be passed to the `Adaptive2d` class. This requires conversion from a regular `Part` face to what the `Adaptive2d` class expects, which is a lists of edges, each edges being a list of points, and each point in turn being a list of an x- and a y-coordinate. What is refered to as a path in the `Adaptive2d` class would look something like the following:
 
 ```python
 path = [edge, edge, edge]
@@ -387,7 +364,7 @@ base = ada.AdaptiveInputState['geometry']
 stock = ada.AdaptiveInputState['stockGeometry']
 ```
 
-Both `base` and `stock` geometry in our case is a single face, which has a single `OuterWire` attribute that can be converted into a single list of points using its `discretize` method. We will thus be able to pass a single edge consisting in a list of nicely ordered coordinate points to the `area.Adaptive2d` class, avoiding any problems that might occur with out of order or reversed edges. When previously passing the `stockPath` as a list of unordered and reversed edges, the operation was returning a different output path than I was expecting, which was the reason for switching to just `discretize` the `OuterWire`. Be careful though that the shape needs to have an `OuterWire` property for the following method to work, something which a `Part.Wire` shape for example does not have. The `discretize` method returns the `OuterWire` as a list of [x,y,z] point coordinates, of which only [x,y] is retained to create the desired 2d path.
+Both `base` and `stock` geometry in our case is a single face, which has a single `OuterWire` attribute that can be converted into a single list of points using its `discretize` method. We can thus pass a single edge consisting in a list of ordered coordinate points to the `area.Adaptive2d` class, avoiding any problems with out of order or reversed edges. In a previous attempt, passing the `stockPath` as a list of edges didn't return the expected result, while discretizing the `OuterWire` did. The shape needs to have an `OuterWire` property for this method to work, something which a `Part.Wire` shape for example does not have. The `discretize` method returns the `OuterWire` as a list of [x,y,z] point coordinates, of which only [x,y] is retained to create the desired 2d path.
 
 ``` PathAdaptive.py
 def shapeToPath2d(shape, deflection=0.0001):
@@ -433,7 +410,7 @@ inputStateObject = {
 }
 ```
 
-If something changed in the operation's input state (checked by comparing the previous and the current input state) or if there is no previous output state, the `area.Adaptive2d` needs to be executed. This is signalled by setting the `adaptiveResults` to `None`.
+If something changed in the operation's input state (checked by comparing the previous and the current input state) or if there is no previous output state, `adaptiveResults` is set to `None`, which causes an `area.Adaptive2d` object to be prepared and executed.
 
 ``` PathAdaptive.py
 if json.dumps(obj.AdaptiveInputState) != json.dumps(inputStateObject):
@@ -447,7 +424,7 @@ else:
 
 ## 2D ADAPTIVE PATH
 
-The `area.Adaptive2d` is fed a number of input parameters, followed by a call to its `Execute` method in which also the `stockPath2d` and the `basePath2d` are supplied. The method takes a progress callback function as third argument, it will receive partial toolpaths as they are being generated and is useful for diplaying progress on screen. The progress function can also stop execution by setting its return value to `True`. Drawing on screen should only be done when the FreeCAD Gui is up though, and the responsiblity for progress being drawn on screen should probably be passed to the `PathAdaptiveGui` script. For now the progress function does nothing more than return `False`.
+The `area.Adaptive2d` operation is fed a number of input parameters, followed by a call to its `Execute` method, in which `stockPath2d` and `basePath2d` are supplied as arguments. The method takes a progress callback function as third argument, which receives partial toolpaths as they are being generated and is useful for diplaying progress on screen. The progress function can also stop execution by setting its return value to `True`. Drawing on screen should only be done when the FreeCAD Gui is up though, and the responsiblity for progress being drawn on screen should probably be passed to the `PathAdaptiveGui` script. For now the progress function does nothing more than return `False`.
 
 ``` PathAdaptive.py
 def progressFn(self, tpaths):
@@ -460,7 +437,7 @@ def progressFn(self, tpaths):
     return False
 ```
 
-The `area.Adaptive2d` class allows setting an `OperationType`, which can be either `ClearingInside`, `ClearingOutside`, `ProfilingInside` or `ProfilingOutside`. These correspond to the `obj.OperationType` and `obj.Side` properties, the strings of which are just concatenated to fetch the appropriate operation type from `area.AdaptiveOperationType`. The operation is started by calling its `Execute` method, updates the `progressFn` with incremental toolpath updates, and returns a list of toolpath objects corresponding to the different milling regions. Each region contains the center (`HelixCenterPoint`) and start point (`StartPoint`) of the helical toolpath used to plunge into the material, and a 2D toolpath to adaptively remove material at this depth, which like the input paths of the adaptive operation consists in a list of [x,y] coordinates. Returned `result` objects are converted to dictionaries so they can be stored on the `AdaptiveOutputState` property of the FreeCAD object.
+The `area.Adaptive2d` class allows setting an `OperationType`, which can be either `ClearingInside`, `ClearingOutside`, `ProfilingInside` or `ProfilingOutside`. These correspond to the `obj.OperationType` and `obj.Side` properties, the strings of which are just concatenated to fetch the appropriate operation type from `area.AdaptiveOperationType`. The operation is started by calling its `Execute` method, updates the `progressFn` with incremental toolpath updates while running, and returns a list of toolpath objects corresponding to different milling regions. Each region contains the center (`HelixCenterPoint`) and start point (`StartPoint`) of the helical toolpath used to plunge into the material, and a 2D toolpath to adaptively remove material at this depth. This toolpath consists in a  list of [x,y] coordinates. Returned `result` objects are converted to dictionaries so they can be stored on the `AdaptiveOutputState` property of the FreeCAD object, which has `App::PropertyPythonObject` as its type and can store Python objects.
 
 ``` PathAdaptive.py
 if adaptiveResults == None:
@@ -488,10 +465,26 @@ if adaptiveResults == None:
 
 ## GCODE GENERATION
 
-Above `area.Adaptive2d` operation provides a 2d path, so depending on the depth of the feature this toolpath will need to be repeated on multiple depths. The GCode generated in this step procedes as follows: it creates a helix toolpath for entering the material to a specified depth, then uses the adaptive toolpath to clear away material at that depth, after which it creates another helix to plunge deeper into the material to the next depth, and again uses the adaptive toolpath to clear away material, continuing to the final depth of the feature. For the final pass one can set the amount of material to remove with the `FinishStep` property. We'll start off by generating these subsequent depths by using a script of the `Path` toolbench named `PathUtils` and the `depth_params` class it provides. This class implements an iterator that returns subsequent machining depths. 
+The `generateGCode` method simply returns when it receives an empty `adaptiveResults` list, otherwise it proceeds to checking some of the values of parameters that will be used further in GCode creation.
+
+```
+def generateGCode(self, obj, adaptiveResults):
+
+    if len(adaptiveResults)==0 or len(adaptiveResults[0]["AdaptivePaths"])==0: return
+
+    stepDown = obj.StepDown.Value
+    if stepDown<0.1 : stepDown=0.1
+    stepUp =  obj.LiftDistance.Value
+    if stepUp<obj.ToolDiameter: stepUp = obj.ToolDiameter
+    finish_step = obj.FinishDepth.Value
+    if finish_step>stepDown: finish_step = stepDown
+    if float(obj.HelixAngle)<1: obj.HelixAngle=1
+```
+
+The `Adaptive2d` operation provides a 2D path, so depending on the depth of the feature this toolpath needs to be repeated at multiple depths. GCode for the adaptive operation proceedes as follows: it creates a helical toolpath for entering the material to a specified depth, then uses the adaptive toolpath to clear away material at that depth, after which it creates another helical toolpath to plunge deeper into the material to the next depth, and again uses the adaptive toolpath to clear away material, continuing to the final depth of the feature. For the final pass one can set the amount of material to remove with the `FinishStep` property. We'll start off by generating these subsequent depths by using the `depth_params` class of the `PathUtils` script. This class implements an iterator that returns subsequent machining depths as it is called for subsequent depth passes. 
 
 ``` PathAdaptive.py
-depth_params = PathUtils.depth_params(
+depthParameters = PathUtils.depth_params(
    clearance_height = obj.ClearanceHeight.Value,
    safe_height = obj.SafeHeight.Value,
    start_depth = obj.StartDepth.Value,
@@ -501,7 +494,7 @@ depth_params = PathUtils.depth_params(
    user_depths=None)
 ```
 
-Processing then loops through each of the pass depths and subsequently through each of the regions, meaning that all regions are milled to a given depth before proceding to the next depth. As mentioned before, the operation first plunges into the material using a helical path, after which it proceeds with the adaptive toolpath. The `area.Adaptive2d` operation provides a center and a start point for the helix of each region. It is possible to feed multiple faces or wires into the operation, but in our case we only have a single region. To know how many helical revolutions are necessary to reach the desired depth (`StepDown` of `FinishStep`), the depth per revolution needs to be known. This can be calculated from the circumference of the helix (seeing it as a circle) and the angle at which it descends, available from the `HelixAngle` property on the `PathAdaptive` object. If we take the length of this circumference and pull it straight to make it the base of a triangle, and let the `HelixAngle` be the angle of the adjoining corner, the law of tangents can be used to calculate the depth per revolution. Divide the depth of the pass by the depth per revolution, and you have the number of revolutions for the pass.
+Processing then loops through each of the pass depths and subsequently through each of the regions, meaning that all regions are milled to a given depth before proceeding to the next depth. As mentioned before, the operation first plunges into the material using a helical toolpath, after which it proceeds with the adaptive toolpath. The `area.Adaptive2d` operation provides a center and a start point for the helix of each region. It is possible to feed multiple faces or wires into the operation, but in our case we only have a single region. To know how many helical revolutions are necessary to reach the desired depth (`StepDown` or `FinishStep`), the depth per revolution needs to be known. This can be calculated from the circumference of the helix (seeing it as a circle) and the angle at which it descends, available from the `HelixAngle` property on the `PathAdaptive` object. If we take the length of this circumference and pull it straight to make it the base of a triangle, and let the `HelixAngle` be the angle of the adjoining corner, the law of tangents can be used to calculate the depth per revolution. Divide the depth of the pass by the depth per revolution, and you have the number of revolutions for the pass.
 
 ![Parameters of the helix toolpath](./images/helix.svg)
 
@@ -517,14 +510,82 @@ depthPerRevolution = circumference * math.tan(helixAngleRadians)
 maxRadians = (passStartDepth-passEndDepth) / depthPerRevolution * 2 * math.pi
 ```
 
-To rotate around the center of the helix we just multiply its radius with cosine and sine of the current angle to respectively get the x- and y-coordinate of the current point. We're however not necessarily starting at an angle of zero radians, our `StartAngle` is determined by the `StartPoint` of the helix. This `StartAngle` is calculated using an `atan2` function, which tells us how much the angle is either behind or ahead the zero angle. So our loop needs to go from `currentRadians` being zero to it reaching `maxRadians`, but for calculating the coordinates of the current point we need to offset for the `StartAngle`. The start of the helix for example is not at `currentRadians` which start at zero, but at `currentRadians + startAngle`.
+To rotate around the center of the helix we just multiply its radius with cosine and sine of the current angle to respectively get the x- and y-coordinate of the current point. We're however not necessarily starting at an angle of zero radians, our `startAngle` is determined by the `StartPoint` of the helix. This `StartAngle` is calculated using an `atan2` function, which tells us how much the angle is either behind or ahead the zero angle. The loop thus needs to go from `currentRadians` being zero to `maxRadians`, but an offset of `startAngle` is applied before calculating the coordinates of the current point. The start of the helix for example is not zero but `startAngle`. Following code brings the tool to the start of the helical toolpath.
 
+```
+passStartDepth = obj.StartDepth.Value
+for passEndDepth in depthParameters.data:
+    for region in adaptiveResults:
 
-# MACHINING THE BEAM
+        center = region["HelixCenterPoint"]
+        start = region["StartPoint"]
 
-LinuxCNC will be used as controller to process each of the beams in the CNC machine.
+        #helix ramp
+        if helixRadius>0.0001:
+            self.commandList.append(Path.Command("(helix to depth: %f)"%passEndDepth))
 
+            helixRadius = math.sqrt( math.pow(center[0]-start[0], 2) + math.pow(center[1]-start[1], 2) )
+            startAngle = math.atan2( start[1] - center[1], start[0] - center[0] )
+            helixStart = [center[0] + helixRadius * math.cos(startAngle), center[1] + helixRadius * math.sin(startAngle)]
+            self.commandList.append(Path.Command("G0", {"X": helixStart[0], "Y": helixStart[1], "Z": obj.ClearanceHeight.Value}))
+            self.commandList.append(Path.Command("G0", {"X": helixStart[0], "Y": helixStart[1], "Z": obj.SafeHeight.Value}))
+            self.commandList.append(Path.Command("G1", {"X": helixStart[0], "Y": helixStart[1], "Z": passStartDepth, "F": op.vertFeed}))
+```
 
+Following fragment then calculates how many revolutions of the helical toolpath (in radians) are needed to reach the desired depth (`passEndDepth`). It starts at `currentRadians = 0` and proceeds to `maxRadians` in 10 degree (`math.pi/18` radians) increments. An additional revolution at `passEndDepth` is finally added to make sure the center is fully cleared.
+
+```
+passDepth = (passStartDepth - passEndDepth)
+maxRadians =  passDepth / depthPerRevolution *  2 * math.pi 
+
+currentRadians = 0
+while currentRadians < maxRadians:
+    x = center[0] + helixRadius * math.cos(currentRadians + startAngle)
+    y = center[1] + helixRadius * math.sin(currentRadians + startAngle)
+    z = passStartDepth - currentRadians / maxRadians * passDepth
+    self.commandList.append(Path.Command("G1", { "X": x, "Y":y, "Z":z, "F": op.vertFeed}))
+    currentRadians += math.pi/18
+
+maxRadians += 2*math.pi
+while currentRadians < maxRadians:
+    x = center[0] + helixRadius * math.cos(currentRadians + startAngle)
+    y = center[1] + helixRadius * math.sin(currentRadians + startAngle)
+    z = passEndDepth
+    self.commandList.append(Path.Command("G1", { "X": x, "Y":y, "Z":z, "F": op.horizFeed}))
+    currentRadians += math.pi/18
+```
+
+The adaptive toolpath that is returned by the `Adaptive2d` operation contains a number of paths, each path consisting in a motion type and a list of points. The `motionType` value determines if the path is a rapid (`G0`) or a feed (`G1`) move, and if material between the previous and the next position has already been cleared. If material remains between the previous and next has not been cleared yet the tool needs to be lifted in order to avoid it.
+
+```
+self.commandList.append(Path.Command("(Adaptive toolpath at depth: %f)"%passEndDepth))
+for path in region["AdaptivePaths"]:
+    motionType = path[0]        #[0] contains motion type
+    for point in path[1]:       #[1] contains list of points
+        x=point[0]
+        y=point[1]
+        if motionType == area.AdaptiveMotionType.Cutting:
+            z=passEndDepth
+            if z!=lastZ: self.commandList.append(Path.Command("G1", { "Z":z,"F": op.vertFeed}))
+            self.commandList.append(Path.Command("G1", { "X": x, "Y":y, "F": op.horizFeed}))
+        elif motionType == area.AdaptiveMotionType.LinkClear:
+            z=passEndDepth+stepUp
+            if z!=lastZ: self.commandList.append(Path.Command("G0", { "Z":z}))
+            self.commandList.append(Path.Command("G0", { "X": x, "Y":y}))
+        elif motionType == area.AdaptiveMotionType.LinkNotClear:
+            z=obj.ClearanceHeight.Value
+            if z!=lastZ: self.commandList.append(Path.Command("G0", { "Z":z}))
+            self.commandList.append(Path.Command("G0", { "X": x, "Y":y}))
+        lastZ = z
+```
+
+At the end of every region, of every depth pass, and of the entire operation, the tool is brought back to `ClearanceHeight`.
+
+```
+z = obj.ClearanceHeight.Value
+if z!=lastZ: self.commandList.append(Path.Command("G0", { "Z":z}))
+lastZ = z
+```
 
 # RESOURCES
 
@@ -534,3 +595,7 @@ LinuxCNC will be used as controller to process each of the beams in the CNC mach
 * [Yorik's book](https://yorikvanhavre.gitbooks.io/a-freecad-manual/content/python_scripting/creating_parametric_objects.html)
 * [Powerusers hub](https://wiki.freecadweb.org/index.php?title=Power_users_hub)
 * [Github of the PathAdaptive developer](https://github.com/kreso-t/FreeCAD_Mod_Adaptive_Path)
+
+# LOCATIONS
+
+* [PathScripts on MacOS](/Applications/FreeCAD.app/Contents/Resources/Mod/Path/PathScripts)
