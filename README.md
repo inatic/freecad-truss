@@ -12,7 +12,7 @@ importlib.reload(Beam)
 
 ## FREECAD OBJECTS
 
-The basic FreeCAD application is mainly concerned with opening documents, saving them, and displaying their content. Other fuctionality is contained in so-called workbenches. The `Part` workbench for example takes care of modelling solid geometry, while the goal of the `Path` workbench is to generate GCode for running on a CNC machine. Each workbench saves its `objects` in the document. These objects are data containers, of which multiple types are available, and attributes can be saved on each object and also stored in the document. Attributes can for example be the length and width of a shape, the radius of a corner, a vector determining the orientation of a shape, etc. Objects are stored in a standard format document (.FCStd), which in fact is nothing more than a ZIP archive that can be extracted for a closer look at its content. It contains, amongst others, an `Document.xml` file describing the objects in the document, and a `GuiDocument.xml` file detailing how objects are displayed in the tree view and 3D window of FreeCAD's graphical user interface (for example specifying line color and thickness). 
+The basic FreeCAD application is mainly concerned with opening documents, saving them, and displaying their content. Other functionality is contained in so-called workbenches. The `Part` workbench for example takes care of modelling solid geometry, while the goal of the `Path` workbench is to generate GCode for running on a CNC machine. Each workbench saves its `objects` in the document. These objects are data containers, of which multiple types are available, and attributes can be saved on each object and also stored in the document. Attributes can for example be the length and width of a shape, the radius of a corner, a vector determining the orientation of a shape, etc. Objects are stored in a standard format document (.FCStd), which in fact is nothing more than a ZIP archive that can be extracted for a closer look at its content. It contains, amongst others, an `Document.xml` file describing the objects in the document, and a `GuiDocument.xml` file detailing how objects are displayed in the tree view and 3D window of FreeCAD's graphical user interface (for example specifying line color and thickness). 
 
 The following command gives an overview of the object types supported by a document. Additional modules might first need to be loaded for the object types they add to become available:
 
@@ -53,7 +53,7 @@ Should you unzip the FreeCAD document and open the `Document.xml` file it contai
 </Document>
 ```
 
-The Python script itself is not stored in the FreeCAD document, but the module and name of the relevant Python class is added to the object's `Proxy` attribute. When the document is opened, FreeCAD expects to find this class in the Pyton search path and takes care of instantiation, after which it is assigned to the `Proxy` attribute on the object so it can be accessed.
+The Python script itself is not stored in the FreeCAD document, but the module and name of the relevant Python class is added to the object's `Proxy` attribute. When the document is opened, FreeCAD expects to find this class in the Python search path and takes care of instantiation, after which it is assigned to the `Proxy` attribute on the object so it can be accessed.
 
 ## BASIC BEAM MODEL
 
@@ -287,7 +287,7 @@ def test():
 
 # PATHADAPTIVE TOOLPATH
 
-The `Path` workbench takes care of generating toolpaths for controlling a CNC machine. It comes with a `PathAdaptive` script that creates adaptive toolpaths, and in what follows a simplified version of this script is created. The script uses the `Adaptive2D` class of the `libarea` library to generate 2D toolpaths. This class accepts 2D coordinate lists for both the feature that is cut (`Base`) and for the stock from which it is cut (`Stock`). These are generated based on the `MortiseFace` and `StockFace` attributes of the `Mortise` object. In my understanding the `Adaptive2D` class can deal with multiple faces (or regions) for both `Base` and `Stock`, but only one is needed here. Toolpaths are generated at the origin and oriented along the Z-axis, after which they are positioned and oriented using the `Placement` attribute of Mortise object. The `PathAdaptive` operation furthermore defines a number of properties like `Side` and `OperationType` that are passed to the `Adaptive2d` class. The `AdaptiveInputState` and `AdaptiveOutputState` contain the inputs and outputs of the `Adaptive2d` class and are usefull for debugging. A toolcontroller and a number of heights are also added to the object, they are used for generation of toolpath and GCode.
+The `Path` workbench takes care of generating toolpaths for controlling a CNC machine. It comes with a `PathAdaptive` script that creates adaptive toolpaths, and in what follows a simplified version of this script is created. The script uses the `Adaptive2D` class of the `libarea` library to generate 2D toolpaths. This class accepts 2D coordinate lists for both the feature that is cut (`Base`) and for the stock from which it is cut (`Stock`). These are generated based on the `MortiseFace` and `StockFace` attributes of the `Mortise` object. In my understanding the `Adaptive2D` class can deal with multiple faces (or regions) for both `Base` and `Stock`, but only one is needed here. Toolpaths are generated at the origin and oriented along the Z-axis, after which they are positioned and oriented using the `Placement` attribute of Mortise object. The `PathAdaptive` operation furthermore defines a number of properties like `Side` and `OperationType` that are passed to the `Adaptive2d` class. The `AdaptiveInputState` and `AdaptiveOutputState` contain the inputs and outputs of the `Adaptive2d` class and are useful for debugging. A toolcontroller and a number of heights are also added to the object, they are used for generation of toolpath and GCode.
 
 ``` PathAdaptive.py
 class PathAdaptive():
@@ -347,7 +347,7 @@ base = getattr(obj.Base[0], obj.Base[1][0])
 stock = getattr(obj.Stock[0], obj.Stock[1][0])
 ```
 
-The geometry of `base` and `stock` faces needs to be passed to the `Adaptive2d` class. This requires conversion from a regular `Part` face to what the `Adaptive2d` class expects, which is a lists of edges, each edges being a list of points, and each point in turn being a list of an x- and a y-coordinate. What is refered to as a path in the `Adaptive2d` class would look something like the following:
+The geometry of `base` and `stock` faces needs to be passed to the `Adaptive2d` class. This requires conversion from a regular `Part` face to what the `Adaptive2d` class expects, which is a lists of edges, each edges being a list of points, and each point in turn being a list of an x- and a y-coordinate. What is referred to as a path in the `Adaptive2d` class would look something like the following:
 
 ```python
 path = [edge, edge, edge]
@@ -424,7 +424,7 @@ else:
 
 ## 2D ADAPTIVE PATH
 
-The `area.Adaptive2d` operation is fed a number of input parameters, followed by a call to its `Execute` method, in which `stockPath2d` and `basePath2d` are supplied as arguments. The method takes a progress callback function as third argument, which receives partial toolpaths as they are being generated and is useful for diplaying progress on screen. The progress function can also stop execution by setting its return value to `True`. Drawing on screen should only be done when the FreeCAD Gui is up though, and the responsiblity for progress being drawn on screen should probably be passed to the `PathAdaptiveGui` script. For now the progress function does nothing more than return `False`.
+The `area.Adaptive2d` operation is fed a number of input parameters, followed by a call to its `Execute` method, in which `stockPath2d` and `basePath2d` are supplied as arguments. The method takes a progress callback function as third argument, which receives partial toolpaths as they are being generated and is useful for displaying progress on screen. The progress function can also stop execution by setting its return value to `True`. Drawing on screen should only be done when the FreeCAD Gui is up though, and the responsibility for progress being drawn on screen should probably be passed to the `PathAdaptiveGui` script. For now the progress function does nothing more than return `False`.
 
 ``` PathAdaptive.py
 def progressFn(self, tpaths):
