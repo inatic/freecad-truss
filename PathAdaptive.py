@@ -29,6 +29,7 @@ import json
 import math
 import area
 from Truss import PathAdaptiveGui
+from Truss import PathOpGui
 
 def shapeToPath2d(shape, deflection=0.0001):
     """
@@ -276,9 +277,6 @@ class PathAdaptive():
         lastZ = z
 
         obj.Path = Path.Path(self.commandList)
-
-        path = obj.Document.addObject("Path::Feature","Path")
-        path.Path = obj.Path
     
 def test():
     """
@@ -329,7 +327,14 @@ def test():
 
     adaptiveOperation = doc.addObject("Path::FeaturePython", "Adaptive")
     PathAdaptive(adaptiveOperation)
-    PathAdaptiveGui.ViewProviderBox(adaptiveOperation.ViewObject)
+    resources = {
+      'name': 'Adaptive',
+      'opPageClass': PathAdaptiveGui.TaskPanelOpPage,
+      'pixmap': 'Path-Adaptive',
+      'menutext': 'Adaptive',
+      'tooltip': 'Adaptive Clearing and Profiling'
+    }
+    PathOpGui.ViewProvider(adaptiveOperation.ViewObject, resources)
 
     ## assign faces of test object to adaptive operation
     adaptiveOperation.Stock = (objMortise, ['StockFace'])
