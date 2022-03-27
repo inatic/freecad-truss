@@ -327,14 +327,14 @@ def test():
 
     adaptiveOperation = doc.addObject("Path::FeaturePython", "Adaptive")
     PathAdaptive(adaptiveOperation)
-    resources = {
+    viewResources = {
       'name': 'Adaptive',
       'opPageClass': PathAdaptiveGui.TaskPanelOpPage,
       'pixmap': 'Path-Adaptive',
       'menutext': 'Adaptive',
       'tooltip': 'Adaptive Clearing and Profiling'
     }
-    PathOpGui.ViewProvider(adaptiveOperation.ViewObject, resources)
+    PathOpGui.ViewProvider(adaptiveOperation.ViewObject, viewResources)
 
     ## assign faces of test object to adaptive operation
     adaptiveOperation.Stock = (objMortise, ['StockFace'])

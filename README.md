@@ -608,6 +608,23 @@ if z!=lastZ: self.commandList.append(Path.Command("G0", { "Z":z}))
 lastZ = z
 ```
 
+## TEST
+
+A `test` function adds two faces to the document, respectively for the hole of the mortise (`mortiseFace`) and for the dimensions of stock material (`stockFace`). It then creates a FreeCAD object for the adaptive operation and assigns a `ViewProvider`. The latter is part of the `PathOpGui` module and common to all Path operations. A number of parameters are first added to a dictionary (`resources`) and used in the instantiaion of the ViewProvider. 
+
+```
+adaptiveOperation = doc.addObject("Path::FeaturePython", "Adaptive")
+PathAdaptive(adaptiveOperation)
+viewResources = {
+  'name': 'Adaptive',
+  'opPageClass': PathAdaptiveGui.TaskPanelOpPage,
+  'pixmap': 'Path-Adaptive',
+  'menutext': 'Adaptive',
+  'tooltip': 'Adaptive Clearing and Profiling'
+}
+PathOpGui.ViewProvider(adaptiveOperation.ViewObject, viewResources)
+```
+
 # RESOURCES
 
 * [FreeCAD file format](https://wiki.freecadweb.org/File_Format_FCStd)
