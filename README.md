@@ -2,12 +2,14 @@ The following describes a construction technique that uses timber beams and basi
 
 # BEAM
 
-At creation a `Beam` object is passed a reference to a line in the mesh. It is modelled according to the length of this line and its relationship to adjoining lines. Test code creates an example `Beam` object when the module is imported.
+At creation a `Beam` object is passed a reference to a line in the mesh. It is modelled according to the length of this line and its relationship to adjoining lines. A `test` function creates an example `Beam` object.
 
 ```python
 from Truss import Beam
+Beam.test()
 import importlib
 importlib.reload(Beam)
+Beam.test()
 ```
 
 ## FREECAD OBJECTS
@@ -285,7 +287,26 @@ def test():
     return objects
 ```
 
-# PATHADAPTIVE TOOLPATH
+# BASE OPERATION
+
+All `Path` operations inherit from the `ObjectOp` class in the `PathOp` module. This class makes sure all operations have a similar set of properties and use the same methods. Depending op the type of features an operation supports, the base class takes care of adding necessary properties to the FreeCAD object. In the following we'll make a simple implementation of the `ObjectOp` class for use with our operations.
+
+```
+FeatureTool         = 0x0001     # ToolController
+FeatureDepths       = 0x0002     # FinalDepth, StartDepth
+FeatureHeights      = 0x0004     # ClearanceHeight, SafeHeight
+FeatureStartPoint   = 0x0008     # StartPoint
+FeatureFinishDepth  = 0x0010     # FinishDepth
+FeatureStepDown     = 0x0020     # StepDown
+FeatureNoFinalDepth = 0x0040     # edit or not edit FinalDepth
+FeatureBaseVertexes = 0x0100     # Base
+FeatureBaseEdges    = 0x0200     # Base
+FeatureBaseFaces    = 0x0400     # Base
+FeatureBasePanels   = 0x0800     # Base
+FeatureLocations    = 0x1000     # Locations
+```
+
+# PATHADAPTIVE OPERATION
 
 The `Path` workbench takes care of generating toolpaths for controlling a CNC machine. It comes with a `PathAdaptive` script that creates adaptive toolpaths, and in what follows a simplified version of this script is created. The script uses the `Adaptive2D` class of the `libarea` library to generate 2D toolpaths. This class accepts 2D coordinate lists for both the feature that is cut (`Base`) and for the stock from which it is cut (`Stock`). These are generated based on the `MortiseFace` and `StockFace` attributes of the `Mortise` object. In my understanding the `Adaptive2D` class can deal with multiple faces (or regions) for both `Base` and `Stock`, but only one is needed here. Toolpaths are generated at the origin and oriented along the Z-axis, after which they are positioned and oriented using the `Placement` attribute of Mortise object. The `PathAdaptive` operation furthermore defines a number of properties like `Side` and `OperationType` that are passed to the `Adaptive2d` class. The `AdaptiveInputState` and `AdaptiveOutputState` contain the inputs and outputs of the `Adaptive2d` class and are usefull for debugging. A toolcontroller and a number of heights are also added to the object, they are used for generation of toolpath and GCode.
 
