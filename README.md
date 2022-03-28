@@ -292,30 +292,31 @@ def test():
 All `Path` operations inherit from the `ObjectOp` class in the `PathOp` module. This class defines a number of properties and methods that operations have in common, like machining clearances and depths, feeds and speeds...  Not every type of operation needs the same set of properties, (e.g. not all machines use coolant), so the class defines subsets of properties from which an operation can choose. As at the moment only the adaptive operation is used, all properties and methods are added to the latter, though in the future a base class like `PathOp` could come in handy. Following is a list of the proporties currently defined in the base class:
 
 | Type				| Name			| Group		| Description
-| App::PropertyLinkSubList	| Base			| Path 		| The base geometry for this operation
-| App::PropertyDistance		| OpStartDepth		| Op values	| Calculated value for start depth
-| App::PropertyDistance		| OpFinalDepth		| Op values	| Calculated value for final depth
-| App::PropertyDistance		| OpToolDiameter	| Op values	| Diameter of the tool
-| App::PropertuDistance		| OpStockZMax		| Op values	| Max Z value of the stock
-| App::PropertyDistance		| OpStockZMin		| Op values	| Min Z value of the stock
-| App::PropertBool		| Active		| Path		| Disable to avoid GCode generation
-| App::PropertyString		| Comment		| Path		| An optional comment for the operation
-| App::PropertyString		| UserLabel		| Path		| User assigned label
-| App::PropertyString		| CycleTime		| Path		| Operation cycle time estimate
-| App::PropertyVectorList	| Locations		| Path		| Base locations for this operation
-| App::PropertyLink		| ToolController	| Path		| Tool controller used to calculate path
-| App::PropertyEnumeration	| CoolantMode		| Path		| Coolant mode for this operation
-| App::PropertyDistance		| StartDepth		| Depth		| Start depth, first cut in Z
-| App::PropertyDistance		| FinalDepth		| Depth		| Final depth of tool, lowest Z value
-| App::PropertyDistance		| StartDepth		| Depth		| Starting depth for internal use
-| App::PropertyDistance		| StepDown		| Depth		| Incremental step down of tool
-| App::PropertyDistance		| FinishDepth		| Depth		| Maximum material removal on final pass
-| App::PropertyDistance		| ClearanceHeight	| Depth		| Height needed to clear clamps and obstructions
-| App::PropertyDistance		| SafeHeight		| Depth		| Rapid safety height between locations
-| App::PropertyVectorDistance	| StartPoint		| StartPoint	| Start point of this path
-| App::PropertyBool		| UseStartPoint		| StartPoint	| Make true to use a start point
-| App::PropertyDistance		| MinDiameter		| Diameter	| Lower limit of turning diameter
-| App::PropertyDistance		| MaxDiameter		| Diameter	| Upper limit of turning diameter
+|-------------------------------|-----------------------|---------------|-------------------------------------------------------|
+| App::PropertyLinkSubList	| Base			| Path 		| The base geometry for this operation			|
+| App::PropertyDistance		| OpStartDepth		| Op values	| Calculated value for start depth			|
+| App::PropertyDistance		| OpFinalDepth		| Op values	| Calculated value for final depth			|
+| App::PropertyDistance		| OpToolDiameter	| Op values	| Diameter of the tool					|
+| App::PropertuDistance		| OpStockZMax		| Op values	| Max Z value of the stock				|
+| App::PropertyDistance		| OpStockZMin		| Op values	| Min Z value of the stock				|
+| App::PropertBool		| Active		| Path		| Disable to avoid GCode generation			|
+| App::PropertyString		| Comment		| Path		| An optional comment for the operation			|
+| App::PropertyString		| UserLabel		| Path		| User assigned label					|
+| App::PropertyString		| CycleTime		| Path		| Operation cycle time estimate				|
+| App::PropertyVectorList	| Locations		| Path		| Base locations for this operation			|
+| App::PropertyLink		| ToolController	| Path		| Tool controller used to calculate path		|
+| App::PropertyEnumeration	| CoolantMode		| Path		| Coolant mode for this operation			|
+| App::PropertyDistance		| StartDepth		| Depth		| Start depth, first cut in Z				|
+| App::PropertyDistance		| FinalDepth		| Depth		| Final depth of tool, lowest Z value			|
+| App::PropertyDistance		| StartDepth		| Depth		| Starting depth for internal use			|
+| App::PropertyDistance		| StepDown		| Depth		| Incremental step down of tool				|
+| App::PropertyDistance		| FinishDepth		| Depth		| Maximum material removal on final pass		|
+| App::PropertyDistance		| ClearanceHeight	| Depth		| Height needed to clear clamps and obstructions	|
+| App::PropertyDistance		| SafeHeight		| Depth		| Rapid safety height between locations			|
+| App::PropertyVectorDistance	| StartPoint		| StartPoint	| Start point of this path				|
+| App::PropertyBool		| UseStartPoint		| StartPoint	| Make true to use a start point			|
+| App::PropertyDistance		| MinDiameter		| Diameter	| Lower limit of turning diameter			|
+| App::PropertyDistance		| MaxDiameter		| Diameter	| Upper limit of turning diameter			|
 
 Apart from above properties, the base class also comes with a number of methods that are used on most operations. The most important of these are:
 
