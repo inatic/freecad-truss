@@ -317,7 +317,7 @@ def test():
     obj = doc.addObject('Part::Feature', 'MortiseFace')
     obj.Shape = mortiseFace
 
-    # MORTISE OBJECT
+    # DUMMY MORTISE OBJECT
 
     objMortise = doc.addObject('Part::FeaturePython', 'Mortise')
     objMortise.addProperty('Part::PropertyPartShape', 'MortiseFace', 'Faces', 'Mortise').MortiseFace = mortiseFace

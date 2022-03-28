@@ -289,22 +289,41 @@ def test():
 
 # BASE OPERATION
 
-All `Path` operations inherit from the `ObjectOp` class in the `PathOp` module. This class makes sure all operations have a similar set of properties and use the same methods. Depending op the type of features an operation supports, the base class takes care of adding necessary properties to the FreeCAD object. In the following we'll make a simple implementation of the `ObjectOp` class for use with our operations.
+All `Path` operations inherit from the `ObjectOp` class in the `PathOp` module. This class defines a number of properties and methods that operations have in common, like machining clearances and depths, feeds and speeds...  Not every type of operation needs the same set of properties, (e.g. not all machines use coolant), so the class defines subsets of properties from which an operation can choose. As at the moment only the adaptive operation is used, all properties and methods are added to the latter, though in the future a base class like `PathOp` could come in handy. Following is a list of the proporties currently defined in the base class:
 
-```
-FeatureTool         = 0x0001     # ToolController
-FeatureDepths       = 0x0002     # FinalDepth, StartDepth
-FeatureHeights      = 0x0004     # ClearanceHeight, SafeHeight
-FeatureStartPoint   = 0x0008     # StartPoint
-FeatureFinishDepth  = 0x0010     # FinishDepth
-FeatureStepDown     = 0x0020     # StepDown
-FeatureNoFinalDepth = 0x0040     # edit or not edit FinalDepth
-FeatureBaseVertexes = 0x0100     # Base
-FeatureBaseEdges    = 0x0200     # Base
-FeatureBaseFaces    = 0x0400     # Base
-FeatureBasePanels   = 0x0800     # Base
-FeatureLocations    = 0x1000     # Locations
-```
+| Type				| Name			| Group		| Description
+| App::PropertyLinkSubList	| Base			| Path 		| The base geometry for this operation
+| App::PropertyDistance		| OpStartDepth		| Op values	| Calculated value for start depth
+| App::PropertyDistance		| OpFinalDepth		| Op values	| Calculated value for final depth
+| App::PropertyDistance		| OpToolDiameter	| Op values	| Diameter of the tool
+| App::PropertuDistance		| OpStockZMax		| Op values	| Max Z value of the stock
+| App::PropertyDistance		| OpStockZMin		| Op values	| Min Z value of the stock
+| App::PropertBool		| Active		| Path		| Disable to avoid GCode generation
+| App::PropertyString		| Comment		| Path		| An optional comment for the operation
+| App::PropertyString		| UserLabel		| Path		| User assigned label
+| App::PropertyString		| CycleTime		| Path		| Operation cycle time estimate
+| App::PropertyVectorList	| Locations		| Path		| Base locations for this operation
+| App::PropertyLink		| ToolController	| Path		| Tool controller used to calculate path
+| App::PropertyEnumeration	| CoolantMode		| Path		| Coolant mode for this operation
+| App::PropertyDistance		| StartDepth		| Depth		| Start depth, first cut in Z
+| App::PropertyDistance		| FinalDepth		| Depth		| Final depth of tool, lowest Z value
+| App::PropertyDistance		| StartDepth		| Depth		| Starting depth for internal use
+| App::PropertyDistance		| StepDown		| Depth		| Incremental step down of tool
+| App::PropertyDistance		| FinishDepth		| Depth		| Maximum material removal on final pass
+| App::PropertyDistance		| ClearanceHeight	| Depth		| Height needed to clear clamps and obstructions
+| App::PropertyDistance		| SafeHeight		| Depth		| Rapid safety height between locations
+| App::PropertyVectorDistance	| StartPoint		| StartPoint	| Start point of this path
+| App::PropertyBool		| UseStartPoint		| StartPoint	| Make true to use a start point
+| App::PropertyDistance		| MinDiameter		| Diameter	| Lower limit of turning diameter
+| App::PropertyDistance		| MaxDiameter		| Diameter	| Upper limit of turning diameter
+
+Apart from above properties, the base class also comes with a number of methods that are used on most operations. The most important of these are:
+
+* onDocumentRestored: loads when a saved document is opened, and can for example be used to check if the object contains all expected properties, if their values make sense...
+* onChanged: executed when one of the properties on the object is modified, is provided with the name of the property as a string (`prop`)
+* setDefaultValues: set default values for properties on object
+* execute: executes the operation, generates GCode
+* getCycleTimeEstimate: get an estimate of the time needed to run the operation
 
 # PATHADAPTIVE OPERATION
 
@@ -624,6 +643,45 @@ viewResources = {
 }
 PathOpGui.ViewProvider(adaptiveOperation.ViewObject, viewResources)
 ```
+
+# PATH PLACEMENT
+
+Features like the mortise are prepared at the origin and along the positive z-axis, and their toolpath is calculated at that location. The toolpath consists solely in G0 (rapid) and G1 (feed) moves, as these make changing the position and the orientation of the path relatively straightforward. A toolpath consists in a sequence of commands that might look somewhat like the following:
+
+```
+Command G0 [ X:3.4875 Y:-42.1 ]
+Command G0 [ X:2.1187 Y:-41.575 ]
+Command G1 [ F:100 Z:20 ]
+Command G1 [ F:100 X:1.9937 Y:-41.525 ]
+Command G1 [ F:100 X:1.6062 Y:-41.362 ]
+Command G1 [ F:100 X:1.0437 Y:-41.081 ]
+Command G1 [ F:100 X:0.58125 Y:-40.981 ]
+Command G1 [ F:100 X:0.58125 Y:-40.981 ]
+Command G1 [ F:100 X:0.3125 Y:-40.994 ]
+```
+
+It's important to notice that commands only need to specify the coordinates of the axis they change. Those coordinates that stay the same, for example the z-coordinates in most commands above, are carried over from previous commands while unaltered. For changing the placement of each command, however, it would be easier if every command specifies all coordinates, though some might be redundant. Then the command specifies a point in space, and that point can easily be translated and rotated to out heart's content. For this we just go through all commands, and if a command doesn't specify the coordinate of a certain axis, the latter is copied from the previous command.
+
+```
+commands = adaptiveOperation.Path.Commands
+for command in commands:
+  if 'X' in command.Parameters:
+    previousX = command.Parameters['X']
+  else:
+    command.Parameters['X'] = previousX
+
+  if 'Y' in command.Parameters:
+    previousY = command.Parameters['Y']
+  else:
+    command.Parameters['Y'] = previousY
+
+  if 'Z' in command.Parameters:
+    previousZ = command.Parameters['Z']
+  else:
+    command.Parameters['Z'] = previousZ
+```
+
+
 
 # RESOURCES
 
