@@ -647,7 +647,7 @@ PathOpGui.ViewProvider(adaptiveOperation.ViewObject, viewResources)
 
 # PATH PLACEMENT
 
-Features like the mortise are prepared at the origin and along the positive z-axis, and their toolpath is calculated at that location. The toolpath consists solely in G0 (rapid) and G1 (feed) moves, as these make changing the position and the orientation of the path relatively straightforward. A toolpath consists in a sequence of commands that might look somewhat like the following:
+Features like the mortise are prepared at the origin and along the positive z-axis, and their toolpath is calculated at that location. The toolpath consists solely in G0 (rapid) and G1 (feed) moves, which makes taking the entire toolpath to change its position and orientation relatively straightforward. A toolpath consists in a sequence of commands that might look somewhat like the following:
 
 ```
 Command G0 [ X:3.4875 Y:-42.1 ]
@@ -661,28 +661,80 @@ Command G1 [ F:100 X:0.58125 Y:-40.981 ]
 Command G1 [ F:100 X:0.3125 Y:-40.994 ]
 ```
 
-It's important to notice that commands only need to specify the coordinates of the axis they change. Those coordinates that stay the same, for example the z-coordinates in most commands above, are carried over from previous commands while unaltered. For changing the placement of each command, however, it would be easier if every command specifies all coordinates, though some might be redundant. Then the command specifies a point in space, and that point can easily be translated and rotated to out heart's content. For this we just go through all commands, and if a command doesn't specify the coordinate of a certain axis, the latter is copied from the previous command.
+It's important to notice that GCode commands only need to specify the coordinates of the axis they change. Coordinates that stay the same, for example the z-coordinates in most commands above, are carried over from previous commands. To change the placement of the toolpath a full set of XYZ-coordinates is however necessary. This is namely done by turning the endpoint of each rapid (`G0`) or feed (`G1`) move into a vector and passing that vector through a transformation matrix. The choice is to either add all coordinates (`XYZ`) when generating the GCode for the operation, or add them after GCode was generated, and the second method will be used for now. The `enumerate` method is used following code fragement so index `i` can be used to update the list in place.
 
 ```
-commands = adaptiveOperation.Path.Commands
-for command in commands:
-  if 'X' in command.Parameters:
-    previousX = command.Parameters['X']
-  else:
-    command.Parameters['X'] = previousX
+commands = obj.Path.Commands
+for i, command in enumerate(commands):
+  if (command.Name == 'G0') or (command.Name == 'G1'):
+    if 'X' in command.Parameters:
+      previousX = command.Parameters['X']
+    else:
+      commands[i].X = previousX   # modify in place
 
-  if 'Y' in command.Parameters:
-    previousY = command.Parameters['Y']
-  else:
-    command.Parameters['Y'] = previousY
+    if 'Y' in command.Parameters:
+      previousY = command.Parameters['Y']
+    else:
+      commands[i].Y = previousY   # modify in place
 
-  if 'Z' in command.Parameters:
-    previousZ = command.Parameters['Z']
-  else:
-    command.Parameters['Z'] = previousZ
+    if 'Z' in command.Parameters:
+      previousZ = command.Parameters['Z']
+    else:
+      commands[i].Z = previousZ   # modify in place
+obj.Path.Commands = commands
 ```
 
+A the transformation matrix is created based on `Position`, `Normal` and `Direction` properties of the operation. The default position is at the origin (`0,0,0`), the default normal is along the positive z-axis (`0,0,1`) and the default direction along the positive y-axis (`0,1,0`). When creating the operation it is up to the user to supply these values, and in our case they come from the `Mortise` object. A `Placement` object is then used to define the necessary translation and rotation, just as it was done in the `Mortise` object. 
 
+```
+obj.addProperty('App::PropertyVector', 'Position', 'Orientation', 'Mortise position').Position = FreeCAD.Vector(0,0,0)
+obj.addProperty('App::PropertyVector', 'Normal', 'Orientation', 'Mortise normal').Normal = FreeCAD.Vector(0,0,1)
+obj.addProperty('App::PropertyVector', 'Direction', 'Orientation', 'Mortise direction').Direction = FreeCAD.Vector(0,1,0)
+
+placement = FreeCAD.Placement()
+placement.Base = obj.Position
+rotation1 = FreeCAD.Rotation(obj.TemporaryNormal, obj.Normal)
+rotation2 = FreeCAD.Rotation(obj.TemporaryDirection, obj.Direction)
+placement.Rotation = rotation1.multiply(rotation2)
+```
+
+Endpoints of each `G0` and `G1` command in the toolpath are then passed through the transformation matrix to put them at the desired location. This is done by again going through all commands, creating a vector for each of the endpoints, transforming that vector, and recovering the coordinates of the resulting vector.
+
+```
+commands = obj.Path.Commands
+for i, command in enumerate(commands):
+  if (command.Name == 'G0') or (command.Name == 'G1'):
+    x = command.Parameters['X']
+    y = command.Parameters['Y']
+    z = command.Parameters['Z']
+    temporaryVector = FreeCAD.Vector(x,y,z)
+    vector = placement.multVec(temporaryVector)
+    commands[i].X = vector.x
+    commands[i].Y = vector.y
+    commands[i].Z = vector.z
+obj.Path.Commands = commands
+```
+
+Apart from the transformation of points along the toolpath, the tool itself needs to be oriented appropriately. In our case the tool requires alignment with the `Normal` vector of the feature being machined (e.g. the mortise pocket). This alignment is possible thanks to one or more rotational axis over which the tool is attached to the machine. A machine might have an `A-axis` that allows for rotation around the X-Axis, a `B-Axis` for rotation around the Y-axis, and a `C-Axis` for rotation around the Z-Axis. Typical setups will have a combination of such rotational axis, for example a- and c-axis (`AC`) or b- and c-axis (`BC`).
+
+![Axis configuration](./images/axis.svg)
+
+The orientation of axis is specified in degrees, with the origin (at 0 degrees) depending on the home position of the machine. The tool might be pointing downwards as in above illustration. Given the coordinates of the `Normal` vector with which the tool needs to be aligned (`1,1,-1` in the example), angles for rotational axis can be calculated using the `atan(opposite/adjacent)` function, for which the `atan2(opposite,adjacent)` method is used as it provides both value and sign. The angle is subsequently turned into degrees and rounded to 5 digits of precision. I planned to add the command for orienting the tool after having moved to the startpoint of the adaptive operation, then noticed how configuring of rotary axis affects the position of the entire path. This functionality remains to be implemented.
+
+```
+# Calculate angles of rotational axis (AC or BC)
+toolOrientation = obj.Normal
+rotationAngleA = round(math.degrees(math.atan2(toolOrientation.y, -toolOrientation.z)), 5)
+rotationAngleB = round(math.degrees(math.atan2(toolOrientation.x, -toolOrientation.z)), 5)
+rotationAngleC = round(math.degrees(math.atan2(toolOrientation.y, toolOrientation.x)), 5)
+rotationAxis = 'AC'
+
+# Orient tool
+if rotationAxis == 'AC':
+  command = Path.Command('G0', {'A': rotationAngleA, 'C': rotationAngleC})
+else:
+  command = Path.Command('G0', {'B': rotationAngleB, 'C': rotationAngleC})
+```
 
 # RESOURCES
 

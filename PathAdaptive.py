@@ -81,8 +81,19 @@ class PathAdaptive():
         obj.addProperty("App::PropertyDistance", "SafeHeight", "Heights", "").SafeHeight = 0
         obj.addProperty("App::PropertyDistance", "StartDepth", "Heights", "").StartDepth = 0
         obj.addProperty("App::PropertyDistance", "StepDown", "Heights", "").StepDown = 0
-        obj.addProperty("App::PropertyDistance", "FinishDepth", "Heights", "").FinishDepth = 0
+        obj.addProperty("App::PropertyDistance", "FinishStep", "Heights", "").FinishStep = 0
         obj.addProperty("App::PropertyDistance", "FinalDepth", "Heights", "").FinalDepth = 0
+
+        # Properties determining the final placement of the toolpath
+        obj.addProperty('App::PropertyVector', 'TemporaryPosition', 'Orientation', 'Temporary mortise position').TemporaryPosition = FreeCAD.Vector(0,0,0)
+        obj.addProperty('App::PropertyVector', 'TemporaryNormal', 'Orientation', 'Temporary mortise normal').TemporaryNormal = FreeCAD.Vector(0,0,1)
+        obj.addProperty('App::PropertyVector', 'TemporaryDirection', 'Orientation', 'Temporary mortise direction').TemporaryDirection = FreeCAD.Vector(0,1,0)
+
+        obj.addProperty('Path::PropertyPath', 'TemporaryPath', 'Path', 'Toolpath for the features as modelled at the origin')
+
+        obj.addProperty('App::PropertyVector', 'Position', 'Orientation', 'Mortise position').Position = FreeCAD.Vector(0,0,0)
+        obj.addProperty('App::PropertyVector', 'Normal', 'Orientation', 'Mortise normal').Normal = FreeCAD.Vector(0,0,1)
+        obj.addProperty('App::PropertyVector', 'Direction', 'Orientation', 'Mortise direction').Direction = FreeCAD.Vector(0,1,0)
 
         obj.Proxy = self
         self.obj = obj
@@ -166,6 +177,11 @@ class PathAdaptive():
 
         self.generateGCode(obj, adaptiveResults)
 
+        obj.TemporaryPath = Path.Path(self.commandList)
+        obj.Path = obj.TemporaryPath
+
+        self.placeToolpath(obj)
+
         Console.PrintMessage("*** Done. Elapsed: %f sec\n\n" %(time.time()-start))
 
     def generateGCode(self, obj, adaptiveResults):
@@ -173,24 +189,29 @@ class PathAdaptive():
         if len(adaptiveResults)==0 or len(adaptiveResults[0]["AdaptivePaths"])==0: return
 
         self.commandList = []
+        self.commandList.append(Path.Command("(Start of adaptive operation)"))
+
+        operationStartPoint = obj.TemporaryPosition + obj.ClearanceHeight.Value*obj.TemporaryNormal.normalize()
+        self.commandList.append(Path.Command("G0", {"X": operationStartPoint.x, "Y": operationStartPoint.y, "Z": operationStartPoint.z}))
     
         stepDown = obj.StepDown.Value
         if stepDown<0.1 : stepDown = 0.1
         stepUp =  obj.LiftDistance.Value
         minLiftDistance = obj.ToolDiameter
         if stepUp<minLiftDistance: stepUp = minLiftDistance
-        finish_step = obj.FinishDepth.Value
+        finish_step = obj.FinishStep.Value
+
         if finish_step>stepDown: finish_step = stepDown
         if float(obj.HelixAngle)<1: obj.HelixAngle=1
 
         self.depthParameters = PathUtils.depth_params(
-                clearance_height=obj.ClearanceHeight.Value,
-                safe_height=obj.SafeHeight.Value,
-                start_depth=obj.StartDepth.Value,
-                step_down=stepDown,
-                z_finish_step=finish_step,
-                final_depth=obj.FinalDepth.Value,
-                user_depths=None)
+          clearance_height=obj.ClearanceHeight.Value,
+          safe_height=obj.SafeHeight.Value,
+          start_depth=obj.StartDepth.Value,
+          step_down=stepDown,
+          z_finish_step=finish_step,
+          final_depth=obj.FinalDepth.Value,
+          user_depths=None)
 
         passStartDepth = obj.StartDepth.Value
         for passEndDepth in self.depthParameters.data:
@@ -275,9 +296,67 @@ class PathAdaptive():
         z=obj.ClearanceHeight.Value
         if z!=lastZ: self.commandList.append(Path.Command("G0", { "Z":z}))
         lastZ = z
-
-        obj.Path = Path.Path(self.commandList)
     
+    def placeToolpath(self, obj):
+      """
+      After generating the toolpath at the origin, translate and rotate each
+      GCode command to give the toolpath its intended placement.
+      """
+
+      # Complete GCode with coordinates for all axis to make placement more straightforward
+      commands = obj.Path.Commands
+      for i, command in enumerate(commands):
+        if (command.Name == 'G0') or (command.Name == 'G1'):
+          if 'X' in command.Parameters:
+            previousX = command.Parameters['X']
+          else:
+            commands[i].X = previousX	# modify in place
+
+          if 'Y' in command.Parameters:
+            previousY = command.Parameters['Y']
+          else:
+            commands[i].Y = previousY	# modify in place
+
+          if 'Z' in command.Parameters:
+            previousZ = command.Parameters['Z']
+          else:
+            commands[i].Z = previousZ  	# modify in place
+      obj.Path.Commands = commands
+
+      # Placement used to transform command endpoints
+      placement = FreeCAD.Placement()
+      placement.Base = obj.Position
+      rotation1 = FreeCAD.Rotation(obj.TemporaryNormal, obj.Normal)
+      rotation2 = FreeCAD.Rotation(obj.TemporaryDirection, obj.Direction)
+      placement.Rotation = rotation1.multiply(rotation2)
+
+      # Create vectors for command endpoints, and move these according to above placement
+      commands = obj.Path.Commands
+      for i, command in enumerate(commands):
+        if (command.Name == 'G0') or (command.Name == 'G1'):
+          x = command.Parameters['X']
+          y = command.Parameters['Y']
+          z = command.Parameters['Z']
+          temporaryVector = FreeCAD.Vector(x,y,z)
+          vector = placement.multVec(temporaryVector)
+          commands[i].X = vector.x
+          commands[i].Y = vector.y
+          commands[i].Z = vector.z
+      obj.Path.Commands = commands
+
+      # Calculate angles of rotational axis (AC or BC)
+      toolOrientation = obj.Normal
+      rotationAngleA = round(math.degrees(math.atan2(toolOrientation.y, -toolOrientation.z)), 5)
+      rotationAngleB = round(math.degrees(math.atan2(toolOrientation.x, -toolOrientation.z)), 5)
+      rotationAngleC = round(math.degrees(math.atan2(toolOrientation.y, toolOrientation.x)), 5)
+      rotationAxis = 'AC'
+
+      # Orient tool
+      if rotationAxis == 'AC':
+        command = Path.Command('G0', {'A': rotationAngleA, 'C': rotationAngleC})
+      else:
+        command = Path.Command('G0', {'B': rotationAngleB, 'C': rotationAngleC})
+
 def test():
     """
     Create an adaptive operation for testing
@@ -285,14 +364,30 @@ def test():
 
     doc = FreeCAD.newDocument()
 
+    # PLACEMENT
+
+    temporaryPosition = FreeCAD.Vector(0,0,0)
+    temporaryNormal = FreeCAD.Vector(0,0,1)
+    temporaryDirection = FreeCAD.Vector(0,1,0)
+    position = FreeCAD.Vector(0,50,50)
+    normal = FreeCAD.Vector(-1,0,0)
+    direction = FreeCAD.Vector(0,1,0)
+
+    mortisePlacement = FreeCAD.Placement()
+    mortisePlacement.Base = position
+    rotation1 = FreeCAD.Rotation(temporaryNormal, normal)
+    rotation2 = FreeCAD.Rotation(temporaryDirection, direction)
+    mortisePlacement.Rotation = rotation1.multiply(rotation2)
+
     # STOCK FACE
 
     height = 100
     width = 100
     centerPoint = FreeCAD.Vector(-height/2, -width/2, 0)
     stockFace = Part.makePlane(height, width, centerPoint)
-    obj = doc.addObject('Part::Feature', 'StockFace')
-    obj.Shape = stockFace
+    stockObject = doc.addObject('Part::Feature', 'StockFace')
+    stockObject.Shape = stockFace
+    stockObject.Placement = mortisePlacement
  
     # MORTISE FACE
 
@@ -314,14 +409,15 @@ def test():
     ## Face and Shape
     mortiseWire = Part.Wire([line03,arc32,line21,arc10])
     mortiseFace = Part.Face(mortiseWire)
-    obj = doc.addObject('Part::Feature', 'MortiseFace')
-    obj.Shape = mortiseFace
+    mortiseObject = doc.addObject('Part::Feature', 'MortiseFace')
+    mortiseObject.Shape = mortiseFace
+    mortiseObject.Placement = mortisePlacement
 
     # DUMMY MORTISE OBJECT
 
-    objMortise = doc.addObject('Part::FeaturePython', 'Mortise')
-    objMortise.addProperty('Part::PropertyPartShape', 'MortiseFace', 'Faces', 'Mortise').MortiseFace = mortiseFace
-    objMortise.addProperty('Part::PropertyPartShape', 'StockFace', 'Faces', 'Stock').StockFace = stockFace
+    obj = doc.addObject('Part::FeaturePython', 'Mortise')
+    obj.addProperty('Part::PropertyPartShape', 'MortiseFace', 'Faces', 'Mortise').MortiseFace = mortiseFace
+    obj.addProperty('Part::PropertyPartShape', 'StockFace', 'Faces', 'Stock').StockFace = stockFace
 
     # ADAPTIVE OPERATION
 
@@ -337,17 +433,21 @@ def test():
     PathOpGui.ViewProvider(adaptiveOperation.ViewObject, viewResources)
 
     ## assign faces of test object to adaptive operation
-    adaptiveOperation.Stock = (objMortise, ['StockFace'])
-    adaptiveOperation.Base = (objMortise, ['MortiseFace'])
+    adaptiveOperation.Stock = (obj, ['StockFace'])
+    adaptiveOperation.Base = (obj, ['MortiseFace'])
 
-    adaptiveOperation.ClearanceHeight = 80
-    adaptiveOperation.SafeHeight = 75
-    adaptiveOperation.StartDepth = 70
+    adaptiveOperation.ClearanceHeight = 20
+    adaptiveOperation.SafeHeight = 10
+    adaptiveOperation.StartDepth = 0
     adaptiveOperation.LiftDistance = 1
     adaptiveOperation.StepDown = 10
-    adaptiveOperation.FinishDepth = 0
-    adaptiveOperation.FinalDepth = 0    
+    adaptiveOperation.FinishStep = 1
+    adaptiveOperation.FinalDepth = -80
     adaptiveOperation.Side = 'Outside' 
+
+    adaptiveOperation.Position = position
+    adaptiveOperation.Normal = normal
+    adaptiveOperation.Direction = direction
 
     doc.recompute()
 
