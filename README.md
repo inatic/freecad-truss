@@ -1,4 +1,19 @@
-The following describes a construction technique that uses timber beams and basic joinery techniques (e.g. mortise and tenon) to build complex structures. The design starts from a mesh of interconnected lines that serves as the basis for both the beams and the joinery features used to connect them. Machining instructions are then generated based on the features of each beam. Development is done in FreeCAD, an open-source CAD/CAM package that offers a Python interface for scripting. A Python console (available under **View | Panels | Python Console**) offers direct interaction with the application. Code is stored in the FreeCAD `Macro` directory, the location of which can be found under `FreeCAD | Preferences | General | Macro`.
+The following describes a construction technique that uses timber beams and basic joinery techniques (e.g. mortise and tenon) to build complex structures. The design starts from a mesh of interconnected lines that serves as the basis for both the beams and the joinery features used to connect them. Machining instructions are then generated based on the features of each beam. Development is done in [FreeCAD][freecad], an open-source CAD/CAM package that offers a Python interface for scripting. A Python console (available under **View | Panels | Python Console**) offers direct interaction with the application. Code is stored in the FreeCAD `Macro` directory, the location of which can be found under `FreeCAD | Preferences | General | Macro`.
+
+# FREECAD
+
+The FreeCAD application itself provides core functionality like interaction with documents, display of document structure in the tree view, visualization of objects in the 3D view window... The application builds upon a number of key libraries to provide this functionality:
+
+* [OpenCascade][opencascade]: geometric modelling
+* [Coin3D][coin3d]: visualization of 3D graphics, provides the same API as [Open Inventor][openinventor] and also builds on OpenGL
+* [QT][qt]: design of the user interface
+
+Source code for FreeCAD consists in a mix of C++ and Python, with most of the functionality written in C++ also made available to Python scripts. This is also the case for above libraries:
+
+* [Pivy][pivy]: wrapper for Coin3D, offers interaction with the 3D View window
+* [PySide][pyside]: wrapper for QT, offers interaction with the FreeCAD user interface
+
+A significant portion of FreeCAD functionality comes in the form of modules. The `Part` module for example interfaces with the OpenCascade geometric modelling kernel, while the `Path` module provides functionality for generating the GCode toolpaths that run on a CNC machine.
 
 # BEAM
 
@@ -748,3 +763,11 @@ else:
 # LOCATIONS
 
 * [PathScripts on MacOS](/Applications/FreeCAD.app/Contents/Resources/Mod/Path/PathScripts)
+
+[freecad]: https://www.freecadweb.org/
+[opencascade]: https://www.opencascade.com/
+[coin3d]: coin3d.github.io
+[openinventor]: https://en.wikipedia.org/wiki/Open_Inventor
+[qt]: https://www.qt.io/
+[pivy]: https://github.com/coin3d/pivy
+[pyside]: https://en.wikipedia.org/wiki/PySide
