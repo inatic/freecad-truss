@@ -5,13 +5,21 @@ from Truss import PathAdaptive
 
 class Mortise():
     """ Create a mortise and tenon joint"""
-    def __init__(self, obj):
-
+    def __init__(self, obj, resources=None):
+        
+        if not resources:
+            resources = {
+                'type': 'mortise',
+                'position': FreeCAD.Vector(0,0,0), 
+                'normal': FreeCAD.Vector(0,0,1),
+                'direction': FreeCAD.Vector(0,1,0)
+            }
+            
         obj.Proxy = self
+        self.obj = obj
 
         obj.addProperty('App::PropertyString', 'Description', 'Base', 'Joint description').Description = "Mortise and tenon joint"
-        obj.addProperty('App::PropertyEnumeration', 'Type', 'Base', 'Joint type').Type = ["mortise","tenon"]
-        obj.Type = "mortise"
+        obj.addProperty('App::PropertyString', 'Type', 'Base', 'Joint type').Type = resources['type']
 
         obj.addProperty('App::PropertyLength', 'StockWidth', 'Dimensions', 'Stock width').StockWidth = '102 mm'
         obj.addProperty('App::PropertyLength', 'StockHeight', 'Dimensions', 'Stock length').StockHeight = '102 mm'
@@ -26,13 +34,12 @@ class Mortise():
         obj.addProperty('App::PropertyVector', 'TemporaryNormal', 'Orientation', 'Temporary mortise normal').TemporaryNormal = FreeCAD.Vector(0,0,1)
         obj.addProperty('App::PropertyVector', 'TemporaryDirection', 'Orientation', 'Temporary mortise direction').TemporaryDirection = FreeCAD.Vector(0,1,0)
 
-        obj.addProperty('App::PropertyVector', 'Position', 'Orientation', 'Mortise position').Position = FreeCAD.Vector(0,0,0)
-        obj.addProperty('App::PropertyVector', 'Normal', 'Orientation', 'Mortise normal').Normal = FreeCAD.Vector(0,0,1)
-        obj.addProperty('App::PropertyVector', 'Direction', 'Orientation', 'Mortise direction').Direction = FreeCAD.Vector(0,1,0)
+        obj.addProperty('App::PropertyVector', 'Position', 'Orientation', 'Mortise position').Position = resources['position']
+        obj.addProperty('App::PropertyVector', 'Normal', 'Orientation', 'Mortise normal').Normal = resources['normal']
+        obj.addProperty('App::PropertyVector', 'Direction', 'Orientation', 'Mortise direction').Direction = resources['direction']
 
+        obj.addProperty("App::PropertyLink", "AdaptiveOperation", "Path", "Adaptive operation to mill this mortise").AdaptiveOperation = None
         obj.addProperty('App::PropertyBool', 'OperationExists', 'Operations', 'Linked adaptive milling operation exists').OperationExists = False
-
-        self.execute(obj)
 
     def getMortiseFace(self, obj):
         "Return temporary shape created at the origin and in a default orientation"
@@ -74,17 +81,12 @@ class Mortise():
 
         return stockFace
 
-    def addOperation(self, obj):
-        "Create an adaptive machining operation using the Path workbench"
-
-        document = obj.Document
-        objectAdaptive = document.addObject("Path::FeaturePython", "Adaptive")
-        PathAdaptive.PathAdaptive(objectAdaptive)
-        objectAdaptive.Base = (obj, ['MortiseFace'])    # App::PropertyLinkSub
-        objectAdaptive.Stock = (obj, ['StockFace'])  # App::PropertyLinkSub
-
     def execute(self, obj):
         "Executed on document recomputes"
+
+        doc = obj.Document
+
+        # Create mortise
 
         obj.MortiseFace = self.getMortiseFace(obj)
         obj.StockFace = self.getStockFace(obj)
@@ -98,14 +100,31 @@ class Mortise():
             obj.Shape = cutoutShape
 
         # Placement
+
         obj.Placement.Base = obj.Position
         rotation1 = FreeCAD.Rotation(obj.TemporaryNormal, obj.Normal)
         rotation2 = FreeCAD.Rotation(obj.TemporaryDirection, obj.Direction)
         obj.Placement.Rotation = rotation1.multiply(rotation2)
 
-        # Create adaptive milling operation
+        # Create operation
+
         if not obj.OperationExists:
-            self.addOperation(obj)
+            adaptiveResources = {
+                'side': 'Inside' if obj.Type == 'mortise' else 'Outside',
+                'liftDistance': 1,
+                'clearanceHeight': 20,
+                'safeHeight': 10,
+                'startDepth': 0,
+                'stepDown': 10,
+                'finishStep': 0,
+                'finalDepth': -obj.MortiseDepth.Value,
+                'position': obj.Position,
+                'normal': obj.Normal,
+                'direction': obj.Direction
+            }
+            objectAdaptive = PathAdaptive.create(doc, adaptiveResources)
+            objectAdaptive.Base = (obj, ['MortiseFace'])    	# App::PropertyLinkSub
+            objectAdaptive.Stock = (obj, ['StockFace'])  	# App::PropertyLinkSub
             obj.OperationExists = True
 
 def test():
@@ -113,9 +132,7 @@ def test():
     Create a few Mortise objects and add them to a document, for testing
     ''' 
 
-    document = FreeCAD.ActiveDocument
-    if not document: 
-        document = FreeCAD.newDocument()
+    document = FreeCAD.newDocument()
     
     # create some features for testing
     features = []
@@ -141,12 +158,14 @@ def test():
     objects = []
     for (position, normal, direction, type) in features:
         objectMortise = document.addObject("Part::FeaturePython", "Mortise")
-        Mortise(objectMortise)
+        mortiseResources = {
+            'position': position, 
+            'normal': normal,
+            'direction': direction,
+            'type': type
+        }
+        Mortise(objectMortise, mortiseResources)
         MortiseGui.ViewProviderBox(objectMortise.ViewObject)
-        objectMortise.Position = position
-        objectMortise.Normal = normal
-        objectMortise.Direction = direction
-        objectMortise.Type = type
         objects.append(objectMortise)
     
     # Fusion of features

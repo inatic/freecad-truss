@@ -15,43 +15,34 @@ Source code for FreeCAD consists in a mix of C++ and Python, with most of the fu
 
 A significant portion of FreeCAD functionality comes in the form of modules. The `Part` module for example interfaces with the OpenCascade geometric modelling kernel, while the `Path` module provides functionality for generating the GCode toolpaths that run on a CNC machine.
 
-# BEAM
+## OBJECTS
 
-At creation a `Beam` object is passed a reference to a line in the mesh. It is modelled according to the length of this line and its relationship to adjoining lines. A `test` function creates an example `Beam` object.
+FreeCAD documents are saved in a standard document format (`.FCStd`), which is a `ZIP` archive that stores information on the document in a number of files. A file named `Document.xml` describes the objects stored in the document, and a file named `GuiDocument.xml` details how objects are displayed in the tree view and the 3D view window of FreeCAD's graphical user interface (for example specifying line color and thickness). The `objects` stored in the document are data containers of which multiple types are available, and these in turn can store `properties` like the length and width of a shape, the radius of a corner, or the vector determining the orientation of a shape. Following commands return the object types that can be stored in a document, as well as the property types that can for example be stored on a `Part::Feature` object.
 
-```python
-from Truss import Beam
-Beam.test()
-import importlib
-importlib.reload(Beam)
-Beam.test()
-```
-
-## FREECAD OBJECTS
-
-The basic FreeCAD application is mainly concerned with opening documents, saving them, and displaying their content. Other functionality is contained in so-called workbenches. The `Part` workbench for example takes care of modelling solid geometry, while the goal of the `Path` workbench is to generate GCode for running on a CNC machine. Each workbench saves its `objects` in the document. These objects are data containers, of which multiple types are available, and attributes can be saved on each object and also stored in the document. Attributes can for example be the length and width of a shape, the radius of a corner, a vector determining the orientation of a shape, etc. Objects are stored in a standard format document (.FCStd), which in fact is nothing more than a ZIP archive that can be extracted for a closer look at its content. It contains, amongst others, an `Document.xml` file describing the objects in the document, and a `GuiDocument.xml` file detailing how objects are displayed in the tree view and 3D window of FreeCAD's graphical user interface (for example specifying line color and thickness). 
-
-The following command gives an overview of the object types supported by a document. Additional modules might first need to be loaded for the object types they add to become available:
+The following command gives an overview of the object types supported by a document. Additional modules might need to be loaded for their object types to become available:
 
 ```python
 import Part
 import Mesh
 doc = FreeCAD.newDocument()
 doc.supportedTypes()
+obj = doc.addObject('Part::Feature', 'MyObject')
+obj.supportedProperties()
 ```
 
-## OBJECT BASED ON A PYTHON SCRIPT
+## SCRIPTED OBJECTS
 
-In interesting capability of FreeCAD is that it allows for creating objects according to your custom Python script. The latter can take care of adding properties to the object, generating shapes, providing functionality for making changes to those shapes, and more. in fact anything that can be done in Python and with the Python libraries available on the system. 
+An interesting capability of FreeCAD is that it allows creating [scripted objects][scriptedobjects] based on custom Python scripts. A scripted object can take care of adding properties to the object, generating shapes, making changes to those shapes... in fact anything that can be done in Python and with the Python libraries available on the system. A `FeaturePython` object comes with a large number of supported property types, a list of which is returned by executing the `supportedProperties` method, and for which more information can be found on the [FreeCAD wiki][featurePythonProperties]. The following adds a scripted (`FeaturePython`) object to the document, checks available properties, and adds a `Length` property to the object.
 
 ```python
 import FreeCAD
 doc = FreeCAD.newDocument()
 beam = doc.addObject("Part::FeaturePython", "Beam")
+beam.supportedProperties()
 beam.addProperty("App::PropertyLength", "Length").Length = 1000.0
 ```
 
-Should you unzip the FreeCAD document and open the `Document.xml` file it contains, above commands should have created something like the following XML-structured description::
+If interested, you could unzip the FreeCAD document and open the `Document.xml` file it contains. After above commands the resulting XML-structured description should look somewhat like the following:
 
 ```xml
 <Document SchemaVersion="4">
@@ -70,7 +61,37 @@ Should you unzip the FreeCAD document and open the `Document.xml` file it contai
 </Document>
 ```
 
-The Python script itself is not stored in the FreeCAD document, but the module and name of the relevant Python class is added to the object's `Proxy` attribute. When the document is opened, FreeCAD expects to find this class in the Python search path and takes care of instantiation, after which it is assigned to the `Proxy` attribute on the object so it can be accessed.
+The Python script itself is not stored in the FreeCAD document, but the module and name of the relevant Python class is added to the object's `Proxy` attribute. When the document is opened, FreeCAD expects to find this class in the Python search path and takes care of instantiation, after which the Python object is assigned to the `Proxy` attribute of the FreeCAD object. Instantiation of the Python object is handled by an `__init__` method and typically takes care of adding properties to the FreeCAD object and possibly assigning default values. The `__init__` method does not run when re-opening a document, which is no problem for properties and their values as these are saved on in the document. Saved documents can however rely on other methods (e.g. `onDocumentRestored`) for executing code at the moment a document is opened. Following are some of the methods that are triggered by events on the scripted object:
+
+- `execute(self, obj)`: called upon recomputing the object
+- `onBeforeChange(self, obj, prop)`: called before a property value is changed, `prop` being the name of the property
+- `onChanged(self, obj, prop)`: called after a property change
+- `onDocumentRestored(self, obj)`: called when a document is restored (opened) or when an object is copied
+
+The `ViewProvider` script, responsible for displaying the shapes generated by the (scripted) object, also provides a number of default methods:
+
+- `attach`: setup of scene sub-graph
+- `updateData`: update View when property of model changes
+- `getDisplayModes`: returns a list of available display modes
+- `getDefaultDisplayMode`: returns the name of the default display mode
+- `setDisplayMode`: sets a display mode
+- `onChanged`: exected when a property is changed, receives the name of the property as an argument
+- `getIcon`: returns the icon to be displayed in the tree view
+- `setState`: called when saving the document
+- `getSTate`: called when restoring the document
+- `claimChildren`: list of objects that will appear as children of the object when seen in the tree view
+
+# BEAM
+
+At creation a `Beam` object is passed a reference to a line in the mesh. It is modelled according to the length of this line and its relationship to adjoining lines. A `test` function creates an example `Beam` object.
+
+```python
+from Truss import Beam
+Beam.test()
+import importlib
+importlib.reload(Beam)
+Beam.test()
+```
 
 ## BASIC BEAM MODEL
 
@@ -140,18 +161,26 @@ Machining needs to be done before beams can be joined together. The locations, o
 
 This type of joint consists in a mortise (hole), a tenon (tongue), and optionally a hole for a dowel to secure the assembly. All features of the mortise and tenon joint are modelled in a single Python class named `Mortise` for brevity. A `Type` attribute specifies if the object generates a mortise, a tenon, or a dowel. For removing material around the tenon the extent of stock dimensions needs to be known, something that is not necessary for creating the mortise. Each mortise has length, width and depth, while stock material has width and height parameters.
 
-Features are modelled at the origin and in a default (temporary) orientation, after which they are moved and rotated to their proper position. The latter is determined by a `position`, a `normal` and a `direction` vector. The reason for modelling features at the origin is that the default `PathAdative` operation expects them to be oriented along the positive Z-axis, so its easier to just generate the path there and move it afterwards. Moving is done using the object's `Placement` matrix. The mortise hole is cut out of the stock, and the resulting shape used to cut tenon tongues at the ends of the beam. The tenon tongue shape is used to cut mortise holes in the sides of the beam, and the dowel hole still needs to be implemented. An `OperationExists` property is used to keep track of whether the adaptive milling operation already exists. Because the milling operation links to properties of the mortise object, it is automatically recalculated when any of these properties are modified. 
+Features are modelled at the origin and in a default (temporary) orientation, after which they are moved and rotated to their proper position. The latter is determined by a `position`, a `normal` and a `direction` vector. The reason for modelling features along the positive z-axis is that the default `PathAdative` operation expects them this way. Moving is done using the object's `Placement` attribute. The mortise hole is cut out of the stock, and the resulting shape used to cut tenon tongues at the ends of the beam. The tenon tongue shape is used to cut mortise holes in the sides of the beam, and the dowel hole still needs to be implemented. An `OperationExists` property is used to keep track of whether the adaptive milling operation already exists. Because the milling operation links to properties of the mortise object, it is automatically recalculated when any of these properties are modified. The `init` method accepts a `resources` dictionary by which properties of the `Mortise` object can immediately be set at instantiation.
 
 ``` Mortise.py
 class Mortise():
     """ Create a mortise and tenon joint"""
-    def __init__(self, obj):
+    def __init__(self, obj, resources=None):
+
+        if not resources:
+            resources = {
+                'type': 'mortise',
+                'position': FreeCAD.Vector(0,0,0),
+                'normal': FreeCAD.Vector(0,0,1),
+                'direction': FreeCAD.Vector(0,1,0)
+            }
 
         obj.Proxy = self
+        self.obj = obj
 
         obj.addProperty('App::PropertyString', 'Description', 'Base', 'Joint description').Description = "Mortise and tenon joint"
-        obj.addProperty('App::PropertyEnumeration', 'Type', 'Base', 'Joint type').Type = ["mortise","tenon"]
-        obj.Type = "mortise"
+        obj.addProperty('App::PropertyString', 'Type', 'Base', 'Joint type').Type = resources['type']
 
         obj.addProperty('App::PropertyLength', 'StockWidth', 'Dimensions', 'Stock width').StockWidth = '102 mm'
         obj.addProperty('App::PropertyLength', 'StockHeight', 'Dimensions', 'Stock length').StockHeight = '102 mm'
@@ -166,13 +195,12 @@ class Mortise():
         obj.addProperty('App::PropertyVector', 'TemporaryNormal', 'Orientation', 'Temporary mortise normal').TemporaryNormal = FreeCAD.Vector(0,0,1)
         obj.addProperty('App::PropertyVector', 'TemporaryDirection', 'Orientation', 'Temporary mortise direction').TemporaryDirection = FreeCAD.Vector(0,1,0)
 
-        obj.addProperty('App::PropertyVector', 'Position', 'Orientation', 'Mortise position').Position = FreeCAD.Vector(0,0,0)
-        obj.addProperty('App::PropertyVector', 'Normal', 'Orientation', 'Mortise normal').Normal = FreeCAD.Vector(0,0,1)
-        obj.addProperty('App::PropertyVector', 'Direction', 'Orientation', 'Mortise direction').Direction = FreeCAD.Vector(0,1,0)
+        obj.addProperty('App::PropertyVector', 'Position', 'Orientation', 'Mortise position').Position = resources['position']
+        obj.addProperty('App::PropertyVector', 'Normal', 'Orientation', 'Mortise normal').Normal = resources['normal']
+        obj.addProperty('App::PropertyVector', 'Direction', 'Orientation', 'Mortise direction').Direction = resources['direction']
 
+        obj.addProperty("App::PropertyLink", "AdaptiveOperation", "Path", "Adaptive operation to mill this mortise").AdaptiveOperation = None
         obj.addProperty('App::PropertyBool', 'OperationExists', 'Operations', 'Linked adaptive milling operation exists').OperationExists = False
-
-        self.execute(obj)
 ```
 
 Next method creates a face at the origin and in the XY-plane that represents a section of the beam stock. It is used in the `PathAdaptive` operation and to cut the tenon feature.
@@ -350,18 +378,30 @@ class PathAdaptive():
     """
     Create an adaptive milling operation
     """
-    def __init__(self, obj):
+    def __init__(self, obj, resources=None):
+
+        if not resources:
+            resources = {
+                'side': 'Outside',
+                'finalDepth': 0,
+                'position': FreeCAD.Vector(0,0,0),
+                'normal': FreeCAD.Vector(0,0,1),
+                'direction': FreeCAD.Vector(0,1,0)
+        }
+
+        obj.Proxy = self
+        self.obj = obj
 
         obj.addProperty("App::PropertyLinkSub", "Base", "Base", "Face representing the feature to be machined").Base = None
         obj.addProperty("App::PropertyLinkSub", "Stock", "Base", "Face representing the stock for the operation").Stock = None
 
         obj.addProperty("App::PropertyEnumeration", "Side", "Adaptive", "Side of selected faces that tool should cut").Side = ['Outside', 'Inside']
-        obj.Side = "Inside"
+        obj.Side = resources['side']
         obj.addProperty("App::PropertyEnumeration", "OperationType", "Adaptive", "Type of adaptive operation").OperationType = ['Clearing', 'Profiling']
         obj.OperationType = "Clearing"
         obj.addProperty("App::PropertyFloat", "Tolerance", "Adaptive",  "Influences accuracy and performance").Tolerance = 0.1
         obj.addProperty("App::PropertyPercent", "StepOver", "Adaptive", "Percent of cutter diameter to step over on each pass").StepOver = 20
-        obj.addProperty("App::PropertyDistance", "LiftDistance", "Adaptive", "Lift distance for rapid moves").LiftDistance = 0
+        obj.addProperty("App::PropertyDistance", "LiftDistance", "Adaptive", "Lift distance for rapid moves").LiftDistance = 1
         obj.addProperty("App::PropertyDistance", "KeepToolDownRatio", "Adaptive", "Max length compared to distance between points").KeepToolDownRatio= 3.0
         obj.addProperty("App::PropertyDistance", "StockToLeave", "Adaptive", "How much stock to leave (i.e. for finishing operation)").StockToLeave= 0
         obj.addProperty("App::PropertyAngle", "HelixAngle", "Adaptive",  "Helix ramp entry angle (degrees)").HelixAngle = 5
@@ -375,18 +415,27 @@ class PathAdaptive():
 
         # These properties should be placed in a toolcontroller
         obj.addProperty("App::PropertyFloat", "ToolDiameter", "Tool", "Tool diameter").ToolDiameter = 12.0
-        obj.addProperty("App::PropertyFloat", "ToolVertSpeed", "Tool", "Vertical speed").Tolerance = 100.0
-        obj.addProperty("App::PropertyFloat", "ToolHorizSpeed", "Tool", "Horizontal speed").Tolerance = 100.0
+        obj.addProperty("App::PropertyFloat", "ToolVertFeed", "Tool", "Vertical speed").ToolVertFeed = 100.0
+        obj.addProperty("App::PropertyFloat", "ToolHorizFeed", "Tool", "Horizontal speed").ToolHorizFeed = 100.0
 
         # These properties might be added to a base operation
-        obj.addProperty("App::PropertyDistance", "ClearanceHeight", "Heights", "").ClearanceHeight = 0
-        obj.addProperty("App::PropertyDistance", "SafeHeight", "Heights", "").SafeHeight = 0
+        obj.addProperty("App::PropertyDistance", "ClearanceHeight", "Heights", "").ClearanceHeight = 20
+        obj.addProperty("App::PropertyDistance", "SafeHeight", "Heights", "").SafeHeight = 10
         obj.addProperty("App::PropertyDistance", "StartDepth", "Heights", "").StartDepth = 0
-        obj.addProperty("App::PropertyDistance", "StepDown", "Heights", "").StepDown = 0
+        obj.addProperty("App::PropertyDistance", "StepDown", "Heights", "").StepDown = 10
         obj.addProperty("App::PropertyDistance", "FinishStep", "Heights", "").FinishStep = 0
-        obj.addProperty("App::PropertyDistance", "FinalDepth", "Heights", "").FinalDepth = 0
+        obj.addProperty("App::PropertyDistance", "FinalDepth", "Heights", "").FinalDepth = resources['finalDepth']
 
-        obj.Proxy = self
+        # Properties determining the final placement of the toolpath
+        obj.addProperty('App::PropertyVector', 'TemporaryPosition', 'Orientation', 'Temporary mortise position').TemporaryPosition = FreeCAD.Vector(0,0,0)
+        obj.addProperty('App::PropertyVector', 'TemporaryNormal', 'Orientation', 'Temporary mortise normal').TemporaryNormal = FreeCAD.Vector(0,0,1)
+        obj.addProperty('App::PropertyVector', 'TemporaryDirection', 'Orientation', 'Temporary mortise direction').TemporaryDirection = FreeCAD.Vector(0,1,0)
+
+        obj.addProperty('Path::PropertyPath', 'TemporaryPath', 'Path', 'Toolpath for the features as modelled at the origin')
+
+        obj.addProperty('App::PropertyVector', 'Position', 'Orientation', 'Mortise position').Position = resources['position']
+        obj.addProperty('App::PropertyVector', 'Normal', 'Orientation', 'Mortise normal').Normal = resources['normal']
+        obj.addProperty('App::PropertyVector', 'Direction', 'Orientation', 'Mortise direction').Direction = resources['direction']
 ```
 
 ## CONVERT FACES TO PATHS
@@ -771,3 +820,5 @@ else:
 [qt]: https://www.qt.io/
 [pivy]: https://github.com/coin3d/pivy
 [pyside]: https://en.wikipedia.org/wiki/PySide
+[scriptedobjects]: https://wiki.freecadweb.org/Create_a_FeaturePython_object_part_I
+[featurePythonProperties]: https://wiki.freecadweb.org/FeaturePython_Custom_Properties

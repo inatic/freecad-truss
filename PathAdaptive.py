@@ -30,6 +30,8 @@ import math
 import area
 from Truss import PathAdaptiveGui
 from Truss import PathOpGui
+from Truss import PathJob
+from Truss import PathJobGui
 
 def shapeToPath2d(shape, deflection=0.0001):
     """
@@ -48,13 +50,25 @@ class PathAdaptive():
     """
     Create an adaptive milling operation
     """
-    def __init__(self, obj):
+    def __init__(self, obj, resources=None):
+
+        if not resources:
+            resources = {
+                'side': 'Outside',
+                'finalDepth': 0,
+                'position': FreeCAD.Vector(0,0,0),
+                'normal': FreeCAD.Vector(0,0,1),
+                'direction': FreeCAD.Vector(0,1,0)
+        }
+
+        obj.Proxy = self
+        self.obj = obj
         
         obj.addProperty("App::PropertyLinkSub", "Base", "Base", "Face representing the feature to be machined").Base = None
         obj.addProperty("App::PropertyLinkSub", "Stock", "Base", "Face representing the stock for the operation").Stock = None
 
         obj.addProperty("App::PropertyEnumeration", "Side", "Adaptive", "Side of selected faces that tool should cut").Side = ['Outside', 'Inside']
-        obj.Side = "Outside"
+        obj.Side = resources['side']
         obj.addProperty("App::PropertyEnumeration", "OperationType", "Adaptive", "Type of adaptive operation").OperationType = ['Clearing', 'Profiling']
         obj.OperationType = "Clearing"
         obj.addProperty("App::PropertyFloat", "Tolerance", "Adaptive",  "Influences accuracy and performance").Tolerance = 0.1
@@ -77,12 +91,13 @@ class PathAdaptive():
         obj.addProperty("App::PropertyFloat", "ToolHorizFeed", "Tool", "Horizontal speed").ToolHorizFeed = 100.0
 
         # These properties might be added to a base operation
-        obj.addProperty("App::PropertyDistance", "ClearanceHeight", "Heights", "").ClearanceHeight = 0
-        obj.addProperty("App::PropertyDistance", "SafeHeight", "Heights", "").SafeHeight = 0
+        obj.addProperty("App::PropertyDistance", "ClearanceHeight", "Heights", "").ClearanceHeight = 20
+        obj.addProperty("App::PropertyDistance", "SafeHeight", "Heights", "").SafeHeight = 10
         obj.addProperty("App::PropertyDistance", "StartDepth", "Heights", "").StartDepth = 0
-        obj.addProperty("App::PropertyDistance", "StepDown", "Heights", "").StepDown = 0
+        obj.addProperty("App::PropertyDistance", "StepDown", "Heights", "").StepDown = 10
         obj.addProperty("App::PropertyDistance", "FinishStep", "Heights", "").FinishStep = 0
-        obj.addProperty("App::PropertyDistance", "FinalDepth", "Heights", "").FinalDepth = 0
+        obj.addProperty("App::PropertyDistance", "FinalDepth", "Heights", "").FinalDepth = resources['finalDepth']
+        obj.addProperty("App::PropertyDistance", "ClearanceHeightBetweenOperations", "Heights", "").ClearanceHeightBetweenOperations = 200
 
         # Properties determining the final placement of the toolpath
         obj.addProperty('App::PropertyVector', 'TemporaryPosition', 'Orientation', 'Temporary mortise position').TemporaryPosition = FreeCAD.Vector(0,0,0)
@@ -91,12 +106,9 @@ class PathAdaptive():
 
         obj.addProperty('Path::PropertyPath', 'TemporaryPath', 'Path', 'Toolpath for the features as modelled at the origin')
 
-        obj.addProperty('App::PropertyVector', 'Position', 'Orientation', 'Mortise position').Position = FreeCAD.Vector(0,0,0)
-        obj.addProperty('App::PropertyVector', 'Normal', 'Orientation', 'Mortise normal').Normal = FreeCAD.Vector(0,0,1)
-        obj.addProperty('App::PropertyVector', 'Direction', 'Orientation', 'Mortise direction').Direction = FreeCAD.Vector(0,1,0)
-
-        obj.Proxy = self
-        self.obj = obj
+        obj.addProperty('App::PropertyVector', 'Position', 'Orientation', 'Mortise position').Position = resources['position']
+        obj.addProperty('App::PropertyVector', 'Normal', 'Orientation', 'Mortise normal').Normal = resources['normal']
+        obj.addProperty('App::PropertyVector', 'Direction', 'Orientation', 'Mortise direction').Direction = resources['direction']
 
     def progressFn(self, tpaths):
         """ Progress callback function, will stop processing of area.Adaptive2d operation when returning True """
@@ -185,10 +197,11 @@ class PathAdaptive():
         Console.PrintMessage("*** Done. Elapsed: %f sec\n\n" %(time.time()-start))
 
     def generateGCode(self, obj, adaptiveResults):
-    
+
         if len(adaptiveResults)==0 or len(adaptiveResults[0]["AdaptivePaths"])==0: return
 
         self.commandList = []
+
         self.commandList.append(Path.Command("(Start of adaptive operation)"))
 
         operationStartPoint = obj.TemporaryPosition + obj.ClearanceHeight.Value*obj.TemporaryNormal.normalize()
@@ -357,6 +370,41 @@ class PathAdaptive():
       else:
         command = Path.Command('G0', {'B': rotationAngleB, 'C': rotationAngleC})
 
+      # Bring tool to clearance height
+      operationStartPoint = obj.Position + obj.ClearanceHeight.Value*obj.Normal.normalize()
+      commands = []
+
+      command = Path.Command("(Start at clearance height)")
+      commands.append(command)
+      command = Path.Command('G0', {'X': operationStartPoint.x, 'Y': operationStartPoint.y , 'Z': obj.ClearanceHeightBetweenOperations.Value})
+      commands.append(command)
+
+      # add commands for toolpath that was just transformed
+      commands.extend(obj.Path.Commands)
+      
+      # Return tool to clearance height
+      command = Path.Command("(Return to clearance height)")
+      commands.append(command)
+      command = Path.Command('G0', {'X': operationStartPoint.x, 'Y': operationStartPoint.y , 'Z': obj.ClearanceHeightBetweenOperations.Value})
+      commands.append(command)
+
+      obj.Path.Commands = commands
+
+def create(doc, resources):
+    '''
+    Create an object for the operation and add it to the document
+    '''
+
+    adaptiveOperationObject = doc.addObject("Path::FeaturePython", "Adaptive")
+    PathAdaptive(adaptiveOperationObject, resources)
+    viewResources = {
+      'name': 'Adaptive',
+      'opPageClass': PathAdaptiveGui.TaskPanelOpPage,
+      'pixmap': 'Path-Adaptive'
+    }
+    PathOpGui.ViewProvider(adaptiveOperationObject.ViewObject, viewResources)
+    return adaptiveOperationObject
+
 def test():
     """
     Create an adaptive operation for testing
@@ -421,34 +469,24 @@ def test():
 
     # ADAPTIVE OPERATION
 
-    adaptiveOperation = doc.addObject("Path::FeaturePython", "Adaptive")
-    PathAdaptive(adaptiveOperation)
-    viewResources = {
-      'name': 'Adaptive',
-      'opPageClass': PathAdaptiveGui.TaskPanelOpPage,
-      'pixmap': 'Path-Adaptive',
-      'menutext': 'Adaptive',
-      'tooltip': 'Adaptive Clearing and Profiling'
+    adaptiveResources = {
+        'side': 'Outside',
+        'finalDepth': -80,
+        'position': position,
+        'normal': normal,
+        'direction': direction
     }
-    PathOpGui.ViewProvider(adaptiveOperation.ViewObject, viewResources)
+    objectAdaptive = create(doc, adaptiveResources)
 
     ## assign faces of test object to adaptive operation
-    adaptiveOperation.Stock = (obj, ['StockFace'])
-    adaptiveOperation.Base = (obj, ['MortiseFace'])
+    objectAdaptive.Stock = (obj, ['StockFace'])
+    objectAdaptive.Base = (obj, ['MortiseFace'])
 
-    adaptiveOperation.ClearanceHeight = 20
-    adaptiveOperation.SafeHeight = 10
-    adaptiveOperation.StartDepth = 0
-    adaptiveOperation.LiftDistance = 1
-    adaptiveOperation.StepDown = 10
-    adaptiveOperation.FinishStep = 1
-    adaptiveOperation.FinalDepth = -80
-    adaptiveOperation.Side = 'Outside' 
+    # JOB
+    jobObject = FreeCAD.ActiveDocument.addObject("Path::FeaturePython", "Job")
+    PathJob.ObjectJob(jobObject, models, templateFile)
 
-    adaptiveOperation.Position = position
-    adaptiveOperation.Normal = normal
-    adaptiveOperation.Direction = direction
 
     doc.recompute()
 
-    return adaptiveOperation
+    return objectAdaptive
