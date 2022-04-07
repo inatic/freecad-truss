@@ -800,6 +800,72 @@ else:
   command = Path.Command('G0', {'B': rotationAngleB, 'C': rotationAngleC})
 ```
 
+# JOB
+
+A job is a scripted object that groups the resources related to machining a part. These resources can be found as properties on the `Job` object, and they are expected to be there by other features of the `Path` workbench like the sumulator. Some of the properties link to other objects, and these objects are futhermore displayed under the `Job` heading in the tree view. When the `Job` object is created, it adds some of these objects to the document, and the `PathJobGui` view provider takes care of displaying them under the `Job` heading in the tree view. The main objects linking to the `Job` object are:
+
+- `Stock`: object representing material out of which the model is cut by the operations in the job
+- `Model`: object representing the finished part after machining
+- `Operations`: group containing operations, each operation being an object itself
+- `ToolController`: links to tool controllers, containing feeds and spindle speed, and a link to the tool
+
+Properties are added to the `Job` object at initialization, and as both `Model` and `Operations` are container objects they are immediately created as well, and hidden as only their content needs to be displayed.
+
+```
+obj.addProperty("App::PropertyLink", "Model", "Base", "The base objects for all operations")
+obj.addProperty("App::PropertyLink", "Stock", "Base", "Solid object to be used as stock.")
+obj.addProperty("App::PropertyLink", "Operations", "Base", "Compound path of all operations in the order they are processed.")
+obj.addProperty("App::PropertyLinkList", "ToolController", "Base", "Collection of tool controllers available for this job.")
+
+obj.Model = obj.Document.addObject("App::DocumentObjectGroup", "Model")
+obj.Operations = obj.Document.addObject("Path::FeatureCompoundPython", "Operations")
+
+if obj.Model.ViewObject:
+    obj.Model.ViewObject.Visibility = False
+if obj.Operations.ViewObject:
+    obj.Operations.ViewObject.Visibility = False
+```
+
+Methods are available for assigning stock, model, operation and toolcontroller objects. The model creates a clone of the shape provided as its input, and the stock for now simply accepts the `Model` property and extends its dimensions.
+
+- addModel(self, obj, model)
+- addStock(self, obj, model, neg, pos)
+- addOperation(self, op, before = None)
+- addToolController(self, tc)
+
+The job object itself is added to the document in the regular way, namely by creating the object and then letting the Python class assign itself to the `Proxy` attribute of the object and take care of initialization. Model, stock, operation, toolcontroller and tool are subsequently assigned.
+
+```
+jobObject = doc.addObject("Path::FeaturePython", "Job")
+ObjectJob(jobObject)
+PathJobGui.ViewProvider(jobObject.ViewObject)
+
+jobObject.Proxy.addModel(jobObject, featureObject)
+jobObject.Proxy.addStock(jobObject, jobObject.Model, 1, 1)
+jobObject.Proxy.addOperation(adaptiveObject)
+
+toolController = PathToolController.Create()
+toolController.Label = 'ToolController'
+toolController.ToolNumber = 1
+toolController.VertFeed = 1000
+toolController.HorizRapid = 1000
+toolController.VertRapid = 3000
+toolController.HorizRapid = 3000
+toolController.SpindleDir = 'Forward'
+toolController.SpindleSpeed = 3500
+jobObject.Proxy.addToolController(toolController)
+adaptiveObject.ToolController = toolController
+
+tool = Path.Tool()
+tool.Name = '12mm-Endmill'
+tool.ToolType = 'EndMill'
+tool.Material = 'Carbide'
+tool.Diameter = 12
+tool.CuttingEdgeHeight = 100
+tool.LengthOffset = 100
+jobObject.ToolController[0].Tool = tool
+```
+
 # RESOURCES
 
 * [FreeCAD file format](https://wiki.freecadweb.org/File_Format_FCStd)

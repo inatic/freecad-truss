@@ -28,6 +28,7 @@ import time
 import json
 import math
 import area
+from PathScripts import PathToolController
 from Truss import PathAdaptiveGui
 from Truss import PathOpGui
 from Truss import PathJob
@@ -86,6 +87,7 @@ class PathAdaptive():
         obj.addProperty("App::PropertyPythonObject", "AdaptiveOutputState","Adaptive", "Internal output state").AdaptiveOutputState = ""
 
         # These properties should be placed in a toolcontroller
+        obj.addProperty("App::PropertyLink", "ToolController", "Path", "The tool controller that will be used to calculate the path")
         obj.addProperty("App::PropertyFloat", "ToolDiameter", "Tool", "Tool diameter").ToolDiameter = 12.0
         obj.addProperty("App::PropertyFloat", "ToolVertFeed", "Tool", "Vertical speed").ToolVertFeed = 100.0
         obj.addProperty("App::PropertyFloat", "ToolHorizFeed", "Tool", "Horizontal speed").ToolHorizFeed = 100.0
@@ -124,7 +126,7 @@ class PathAdaptive():
         Console.PrintMessage("*** Adaptive toolpath processing started...\n")
         obj.Path = Path.Path("(calculating...)") #hide old toolpaths during recalculation
 
-        # Fetch and convert faces
+        # Fetch faces
         baseFace = getattr(obj.Base[0], obj.Base[1][0])
         stockFace = getattr(obj.Stock[0], obj.Stock[1][0])
         basePath2d = shapeToPath2d(baseFace)
@@ -405,12 +407,19 @@ def create(doc, resources):
     PathOpGui.ViewProvider(adaptiveOperationObject.ViewObject, viewResources)
     return adaptiveOperationObject
 
-def test():
+def test(doc=None):
     """
     Create an adaptive operation for testing
     """
 
-    doc = FreeCAD.newDocument()
+    if not doc:
+        doc = FreeCAD.newDocument()
+    
+    type = 'tenon'
+
+    mortiseDepth = 80
+    mortiseLength = 70
+    mortiseWidth = 30
 
     # PLACEMENT
 
@@ -418,7 +427,7 @@ def test():
     temporaryNormal = FreeCAD.Vector(0,0,1)
     temporaryDirection = FreeCAD.Vector(0,1,0)
     position = FreeCAD.Vector(0,50,50)
-    normal = FreeCAD.Vector(-1,0,0)
+    normal = FreeCAD.Vector(0,0,1)
     direction = FreeCAD.Vector(0,1,0)
 
     mortisePlacement = FreeCAD.Placement()
@@ -433,14 +442,17 @@ def test():
     width = 100
     centerPoint = FreeCAD.Vector(-height/2, -width/2, 0)
     stockFace = Part.makePlane(height, width, centerPoint)
+    stockShape = stockFace.extrude(-mortiseDepth*temporaryNormal)
     stockObject = doc.addObject('Part::Feature', 'StockFace')
     stockObject.Shape = stockFace
     stockObject.Placement = mortisePlacement
+    if stockObject.ViewObject:
+        stockObject.ViewObject.Visibility = False
  
     # MORTISE FACE
 
-    length = 70
-    width = 30
+    length = mortiseLength
+    width = mortiseWidth
     ## Points in each quadrant
     point0 = FreeCAD.Vector(+width/2, +length/2-width/2, 0)
     point1 = FreeCAD.Vector(-width/2, +length/2-width/2, 0)
@@ -457,9 +469,23 @@ def test():
     ## Face and Shape
     mortiseWire = Part.Wire([line03,arc32,line21,arc10])
     mortiseFace = Part.Face(mortiseWire)
+    mortiseShape = mortiseFace.extrude(-mortiseDepth*temporaryNormal)
     mortiseObject = doc.addObject('Part::Feature', 'MortiseFace')
     mortiseObject.Shape = mortiseFace
     mortiseObject.Placement = mortisePlacement
+    if mortiseObject.ViewObject:
+        mortiseObject.ViewObject.Visibility = False
+
+    # CUTTER
+
+    modelObject = doc.addObject('Part::Feature', 'Model')
+    if type=='mortise':
+        cutter = mortiseShape
+    else:
+        cutter = stockShape.cut(mortiseShape)
+    modelShape = stockShape.cut(cutter)
+    modelObject.Shape = modelShape
+    modelObject.Placement = mortisePlacement
 
     # DUMMY MORTISE OBJECT
 
@@ -470,23 +496,18 @@ def test():
     # ADAPTIVE OPERATION
 
     adaptiveResources = {
-        'side': 'Outside',
-        'finalDepth': -80,
+        'side': 'Outside' if type=='tenon' else 'Inside',
+        'finalDepth': -mortiseDepth,
         'position': position,
         'normal': normal,
         'direction': direction
     }
-    objectAdaptive = create(doc, adaptiveResources)
+    adaptiveObject = create(doc, adaptiveResources)
 
     ## assign faces of test object to adaptive operation
-    objectAdaptive.Stock = (obj, ['StockFace'])
-    objectAdaptive.Base = (obj, ['MortiseFace'])
-
-    # JOB
-    jobObject = FreeCAD.ActiveDocument.addObject("Path::FeaturePython", "Job")
-    PathJob.ObjectJob(jobObject, models, templateFile)
-
+    adaptiveObject.Stock = (obj, ['StockFace'])
+    adaptiveObject.Base = (obj, ['MortiseFace'])
 
     doc.recompute()
 
-    return objectAdaptive
+    return adaptiveObject
