@@ -114,8 +114,8 @@ class ObjectJob:
         obj.PostProcessor = 'linuxcnc'
         obj.PostProcessorOutputFile = 'test.ngc'
 
-    def addModel(self, obj, model):
-        obj.Model.addObjects([createModelResourceClone(obj, model)])
+    def addModel(self, obj, models):
+        obj.Model.addObjects([createModelResourceClone(obj, model) for model in models])
 
     def addStock(self, obj, model, neg, pos):
         obj.Stock = PathStock.CreateFromBase(model, neg=None, pos=None)
@@ -351,7 +351,7 @@ def test():
     jobObject = doc.addObject("Path::FeaturePython", "Job")
     ObjectJob(jobObject)
     PathJobGui.ViewProvider(jobObject.ViewObject)
-    jobObject.Proxy.addModel(jobObject, featureObject)
+    jobObject.Proxy.addModel(jobObject, [featureObject])
     jobObject.Proxy.addStock(jobObject, jobObject.Model, 1, 1)
     jobObject.Proxy.addOperation(adaptiveObject)
 
@@ -361,7 +361,7 @@ def test():
     toolController.Label = 'ToolController'
     toolController.ToolNumber = 1
     toolController.VertFeed = 1000
-    toolController.HorizRapid = 1000
+    toolController.HorizFeed = 1000
     toolController.VertRapid = 3000
     toolController.HorizRapid = 3000
     toolController.SpindleDir = 'Forward'
