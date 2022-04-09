@@ -800,6 +800,26 @@ else:
   command = Path.Command('G0', {'B': rotationAngleB, 'C': rotationAngleC})
 ```
 
+## STOCK
+
+The dimensions of the stock material can be defined in multiple way: starting from the shape of the model and possibly extending it in along the coordinate axis (`FromBase`), creating a box of fixed dimensions (`CreateBox`) or creating a cylinder of fixed dimensions (`CreateCylinder`). The stock is created as a scripted object, and different classes are available for the different stock types.
+
+```
+# Create stock from base object
+baseStockObject = document.addObject('Part::FeaturePython', 'StockFromBase')
+StockFromBase(baseStockObject, baseObject, {'x':2, 'y':2, 'z':2}, {'x':2, 'y':2, 'z':2})
+
+# Create stock from box
+placement = FreeCAD.Placement(FreeCAD.Vector(-40, -40, -40), FreeCAD.Rotation())
+boxStockObject = document.addObject('Part::FeaturePython', 'StockCreateBox')
+StockCreateBox(boxStockObject, {'x':80, 'y':80, 'z':80}, placement)
+
+# Create stock from cylinder
+placement = FreeCAD.Placement(FreeCAD.Vector(0, 0, -50), FreeCAD.Rotation())
+cylinderStockObject = document.addObject('Part::FeaturePython', 'StockCreateCylinder')
+StockCreateCylinder(cylinderStockObject, 50, 100, placement)
+```
+
 # JOB
 
 A job is a scripted object that groups the resources related to machining a part. These resources can be found as properties on the `Job` object, and they are expected to be there by other features of the `Path` workbench like the sumulator. Some of the properties link to other objects, and these objects are futhermore displayed under the `Job` heading in the tree view. When the `Job` object is created, it adds some of these objects to the document, and the `PathJobGui` view provider takes care of displaying them under the `Job` heading in the tree view. The main objects linking to the `Job` object are:
@@ -865,6 +885,7 @@ tool.CuttingEdgeHeight = 100
 tool.LengthOffset = 100
 jobObject.ToolController[0].Tool = tool
 ```
+
 
 # RESOURCES
 
