@@ -114,25 +114,25 @@ class ObjectJob:
         obj.PostProcessor = 'linuxcnc'
         obj.PostProcessorOutputFile = 'test.ngc'
 
-    def addModel(self, obj, models):
+    def addModels(self, obj, models):
         obj.Model.addObjects([createModelResourceClone(obj, model) for model in models])
 
-    def addStock(self, obj, model, neg, pos):
-        obj.Stock = PathStock.CreateFromBase(model, neg=None, pos=None)
+    def addStock(self, obj, stockObject):
+        obj.Stock = stockObject
 
-    def addOperation(self, op, before = None):
+    def addOperation(self, operation, before = None):
         group = self.obj.Operations.Group
-        if op not in group:
+        if operation not in group:
             if before:
                 try:
-                    group.insert(group.index(before), op)
+                    group.insert(group.index(before), operation)
                 except Exception as e:
                     PathLog.error(e)
-                    group.append(op)
+                    group.append(operation)
             else:
-                group.append(op)
+                group.append(operation)
             self.obj.Operations.Group = group
-            op.Path.Center = self.obj.Operations.Path.Center
+            operation.Path.Center = self.obj.Operations.Path.Center
 
     def addToolController(self, tc):
         group = self.obj.ToolController
@@ -252,7 +252,7 @@ def test():
     Create a job for testing
     """
 
-    doc = FreeCAD.newDocument()
+    document = FreeCAD.newDocument()
 
     type = 'mortise'
     mortiseDepth = 80
@@ -274,18 +274,13 @@ def test():
     rotation2 = FreeCAD.Rotation(temporaryDirection, direction)
     mortisePlacement.Rotation = rotation1.multiply(rotation2)
 
-    # STOCK FACE
+    # STOCK
 
     height = 100
     width = 100
     centerPoint = FreeCAD.Vector(-height/2, -width/2, 0)
     stockFace = Part.makePlane(height, width, centerPoint)
     stockShape = stockFace.extrude(-mortiseDepth*temporaryNormal)
-    #stockObject = doc.addObject('Part::Feature', 'Stock')
-    #stockObject.Shape = stockShape
-    #stockObject.Placement = mortisePlacement
-    #if stockObject.ViewObject:
-    #    stockObject.ViewObject.Visibility = False
 
     # MORTISE FACE
 
@@ -308,15 +303,15 @@ def test():
     mortiseWire = Part.Wire([line03,arc32,line21,arc10])
     mortiseFace = Part.Face(mortiseWire)
     mortiseShape = mortiseFace.extrude(-mortiseDepth*temporaryNormal)
-    mortiseObject = doc.addObject('Part::Feature', 'MortiseFace')
+    mortiseObject = document.addObject('Part::Feature', 'MortiseFace')
     mortiseObject.Shape = mortiseFace
     mortiseObject.Placement = mortisePlacement
     if mortiseObject.ViewObject:
         mortiseObject.ViewObject.Visibility = False
 
-    # CUTTER
+    # MORTISE CUTTING SHAPE
 
-    featureObject = doc.addObject('Part::Feature', 'Feature')
+    featureObject = document.addObject('Part::Feature', 'Feature')
     if type=='mortise':
         cutter = mortiseShape
     else:
@@ -327,7 +322,7 @@ def test():
 
     # DUMMY MORTISE OBJECT
 
-    obj = doc.addObject('Part::FeaturePython', 'Mortise')
+    obj = document.addObject('Part::FeaturePython', 'Mortise')
     obj.addProperty('Part::PropertyPartShape', 'MortiseFace', 'Faces', 'Mortise').MortiseFace = mortiseFace
     obj.addProperty('Part::PropertyPartShape', 'StockFace', 'Faces', 'Stock').StockFace = stockFace
 
@@ -340,19 +335,24 @@ def test():
         'normal': normal,
         'direction': direction
     }
-    adaptiveObject = PathAdaptive.create(doc, adaptiveResources)
+    adaptiveObject = PathAdaptive.create(document, adaptiveResources)
 
     ## assign faces of test object to adaptive operation
     adaptiveObject.Stock = (obj, ['StockFace'])
     adaptiveObject.Base = (obj, ['MortiseFace'])
 
+    # STOCK
+
+    stockObject = document.addObject('Part::FeaturePython', 'Stock')
+    PathStock.StockFromBase(stockObject, featureObject, {'x':2, 'y':2, 'z':2}, {'x':2, 'y':2, 'z':2})
+
     # JOB
 
-    jobObject = doc.addObject("Path::FeaturePython", "Job")
+    jobObject = document.addObject("Path::FeaturePython", "Job")
     ObjectJob(jobObject)
     PathJobGui.ViewProvider(jobObject.ViewObject)
-    jobObject.Proxy.addModel(jobObject, [featureObject])
-    jobObject.Proxy.addStock(jobObject, jobObject.Model, 1, 1)
+    jobObject.Proxy.addModels(jobObject, [featureObject])
+    jobObject.Proxy.addStock(jobObject, stockObject)
     jobObject.Proxy.addOperation(adaptiveObject)
 
     # TOOL CONTROLLER
@@ -380,4 +380,4 @@ def test():
     tool.LengthOffset = 100
     jobObject.ToolController[0].Tool = tool
 
-    doc.recompute()
+    document.recompute()

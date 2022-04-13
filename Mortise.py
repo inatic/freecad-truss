@@ -1,7 +1,12 @@
 import FreeCAD
 import Part
+import Path
+import PathScripts.PathToolController as PathToolController
 from Truss import MortiseGui
 from Truss import PathAdaptive
+from Truss import PathJob
+from Truss import PathJobGui
+from Truss import PathStock
 
 class Mortise():
     """ Create a mortise and tenon joint"""
@@ -37,9 +42,6 @@ class Mortise():
         obj.addProperty('App::PropertyVector', 'Position', 'Orientation', 'Mortise position').Position = resources['position']
         obj.addProperty('App::PropertyVector', 'Normal', 'Orientation', 'Mortise normal').Normal = resources['normal']
         obj.addProperty('App::PropertyVector', 'Direction', 'Orientation', 'Mortise direction').Direction = resources['direction']
-
-        obj.addProperty("App::PropertyLink", "AdaptiveOperation", "Path", "Adaptive operation to mill this mortise").AdaptiveOperation = None
-        obj.addProperty('App::PropertyBool', 'OperationExists', 'Operations', 'Linked adaptive milling operation exists').OperationExists = False
 
     def getMortiseFace(self, obj):
         "Return temporary shape created at the origin and in a default orientation"
@@ -84,8 +86,6 @@ class Mortise():
     def execute(self, obj):
         "Executed on document recomputes"
 
-        doc = obj.Document
-
         # Create mortise
 
         obj.MortiseFace = self.getMortiseFace(obj)
@@ -99,33 +99,12 @@ class Mortise():
         else:
             obj.Shape = cutoutShape
 
-        # Placement
+        # Set placement
 
         obj.Placement.Base = obj.Position
         rotation1 = FreeCAD.Rotation(obj.TemporaryNormal, obj.Normal)
         rotation2 = FreeCAD.Rotation(obj.TemporaryDirection, obj.Direction)
         obj.Placement.Rotation = rotation1.multiply(rotation2)
-
-        # Create operation
-
-        if not obj.OperationExists:
-            adaptiveResources = {
-                'side': 'Inside' if obj.Type == 'mortise' else 'Outside',
-                'liftDistance': 1,
-                'clearanceHeight': 20,
-                'safeHeight': 10,
-                'startDepth': 0,
-                'stepDown': 10,
-                'finishStep': 0,
-                'finalDepth': -obj.MortiseDepth.Value,
-                'position': obj.Position,
-                'normal': obj.Normal,
-                'direction': obj.Direction
-            }
-            objectAdaptive = PathAdaptive.create(doc, adaptiveResources)
-            objectAdaptive.Base = (obj, ['MortiseFace'])    	# App::PropertyLinkSub
-            objectAdaptive.Stock = (obj, ['StockFace'])  	# App::PropertyLinkSub
-            obj.OperationExists = True
 
 def test():
     ''' 
@@ -133,8 +112,21 @@ def test():
     ''' 
 
     document = FreeCAD.newDocument()
+
+    # BEAM
+
+    v0 = FreeCAD.Vector(-500, 50, 50)
+    v1 = FreeCAD.Vector( 500, 50, 50)
+    line = Part.makeLine(v0, v1)
+
+    length = line.Length
+    width = 100
+    height = 100
+
+    beamShape = Part.makeBox(length, width, height)
     
-    # create some features for testing
+    # MORTISE FEATURES
+
     features = []
     
     position = FreeCAD.Vector(0,50,50)
@@ -155,22 +147,96 @@ def test():
     type = "tenon"
     features.append((position, normal, direction, type))
     
-    objects = []
+    mortiseObjects = []
     for (position, normal, direction, type) in features:
-        objectMortise = document.addObject("Part::FeaturePython", "Mortise")
+        mortiseObject = document.addObject("Part::FeaturePython", "Mortise")
         mortiseResources = {
             'position': position, 
             'normal': normal,
             'direction': direction,
             'type': type
         }
-        Mortise(objectMortise, mortiseResources)
-        MortiseGui.ViewProviderBox(objectMortise.ViewObject)
-        objects.append(objectMortise)
+        Mortise(mortiseObject, mortiseResources)
+        MortiseGui.ViewProviderBox(mortiseObject.ViewObject)
+        mortiseObjects.append(mortiseObject)
     
     # Fusion of features
     objectFusion = document.addObject("Part::MultiFuse","Features")
-    objectFusion.Shapes = objects
+    objectFusion.Shapes = mortiseObjects
+
+    # CUT MORTISE FEATURES FROM BEAM
+
+    document.recompute()
+
+    featureShape = objectFusion.Shape
+    beamShape = beamShape.cut(featureShape)
+    beamObject = document.addObject("Part::Feature", "Beam")
+    beamObject.Shape = beamShape
     
+    # ADAPTIVE OPERATIONS
+
+    adaptiveObjects = []
+    for mortiseObject in mortiseObjects:
+        adaptiveResources = {
+            'side': 'Inside' if mortiseObject.Type == 'mortise' else 'Outside',
+            'liftDistance': 1,
+            'clearanceHeight': 20,
+            'safeHeight': 10,
+            'startDepth': 0,
+            'stepDown': 10,
+            'finishStep': 0,
+            'finalDepth': -mortiseObject.MortiseDepth.Value,
+            'position': mortiseObject.Position,
+            'normal': mortiseObject.Normal,
+            'direction': mortiseObject.Direction
+        }
+        adaptiveObject = PathAdaptive.create(document, adaptiveResources)
+        adaptiveObject.Base = (mortiseObject, ['MortiseFace'])    	# App::PropertyLinkSub
+        adaptiveObject.Stock = (mortiseObject, ['StockFace'])  	# App::PropertyLinkSub
+        adaptiveObjects.append(adaptiveObject)
+
+    # STOCK
+
+    stockObject = document.addObject('Part::FeaturePython', 'Stock')
+    PathStock.StockFromBase(stockObject, beamObject, {'x':2, 'y':2, 'z':2}, {'x':2, 'y':2, 'z':2})
+
+    # JOB
+
+    jobObject = document.addObject("Path::FeaturePython", "Job")
+    PathJob.ObjectJob(jobObject)
+    PathJobGui.ViewProvider(jobObject.ViewObject)
+    jobObject.Proxy.addModels(jobObject, mortiseObjects)
+    jobObject.Proxy.addStock(jobObject, stockObject)
+    for adaptiveObject in adaptiveObjects:
+        jobObject.Proxy.addOperation(adaptiveObject)
+
+    # TOOL CONTROLLER
+
+    toolController = PathToolController.Create()
+    toolController.Label = 'ToolController'
+    toolController.ToolNumber = 1
+    toolController.VertFeed = 1000
+    toolController.HorizFeed = 1000
+    toolController.VertRapid = 3000
+    toolController.HorizRapid = 3000
+    toolController.SpindleDir = 'Forward'
+    toolController.SpindleSpeed = 3500
+    jobObject.Proxy.addToolController(toolController)
+    adaptiveObject.ToolController = toolController
+
+    # TOOL
+
+    tool = Path.Tool()
+    tool.Name = '12mm-Endmill'
+    tool.ToolType = 'EndMill'
+    tool.Material = 'Carbide'
+    tool.Diameter = 12
+    tool.CuttingEdgeHeight = 100
+    tool.LengthOffset = 100
+    jobObject.ToolController[0].Tool = tool
+
+    for adaptiveObject in adaptiveObjects:
+        adaptiveObject.ToolController = jobObject.ToolController[0]
+
     document.recompute()
 
