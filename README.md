@@ -1011,7 +1011,7 @@ Adaptive operations are then created based on properties of the mortise objects.
 
 # BOOKS
 
-* [Die Bau-und Kunstzimmerei (Band 1), Theodor Krauth](https://archive.org/details/bub_gb_68blAAAAMAAJ)
+* [Die Bau-und Kunstzimmerei (Band 1), Theodor Krauth](https://archive.org/details/bub_gb_lexEAAAAYAAJ)
 * [Die Bau-und Kunstzimmerei (Band 2), Theodor Krauth](https://archive.org/details/bub_gb_j-xEAAAAYAAJ)
 * [Die gesamte Bauschreinerei (Band 1), Theodor Krauth](https://archive.org/details/diegesamtebausch01krau)
 * [Die gesamte Bauschreinerei (Band 2), Theodor Krauth](https://archive.org/details/diegesamtebausch02krau)
