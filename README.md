@@ -1009,6 +1009,13 @@ Adaptive operations are then created based on properties of the mortise objects.
 * [Powerusers hub](https://wiki.freecadweb.org/index.php?title=Power_users_hub)
 * [Github of the PathAdaptive developer](https://github.com/kreso-t/FreeCAD_Mod_Adaptive_Path)
 
+# BOOKS
+
+* [Die Bau-und Kunstzimmerei (Band 1), Theodor Krauth](https://archive.org/details/bub_gb_68blAAAAMAAJ)
+* [Die Bau-und Kunstzimmerei (Band 2), Theodor Krauth](https://archive.org/details/bub_gb_j-xEAAAAYAAJ)
+* [Die gesamte Bauschreinerei (Band 1), Theodor Krauth](https://archive.org/details/diegesamtebausch01krau)
+* [Die gesamte Bauschreinerei (Band 2), Theodor Krauth](https://archive.org/details/diegesamtebausch02krau)
+
 # LOCATIONS
 
 * [PathScripts on MacOS](/Applications/FreeCAD.app/Contents/Resources/Mod/Path/PathScripts)
