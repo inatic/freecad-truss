@@ -1,5 +1,14 @@
 The following describes a construction technique that uses timber beams and basic joinery techniques (e.g. mortise and tenon) to build complex structures. The design starts from a mesh of interconnected lines that serves as the basis for both the beams and the joinery features used to connect them. Machining instructions are then generated based on the features of each beam. Development is done in [FreeCAD][freecad], an open-source CAD/CAM package that offers a Python interface for scripting. A Python console (available under **View | Panels | Python Console**) offers direct interaction with the application. Code is stored in the FreeCAD `Macro` directory, the location of which can be found under `FreeCAD | Preferences | General | Macro`.
 
+# INSTALLATION
+
+The scripts in this repository are cloned into the `Macro` directory of your FreeCAD installation and used from FreeCAD's the Python console. For Ubuntu the macro directory is `/home/<yourname>/.FreeCAD/Macro`, and for other operating systems the equivalent folder can be found by opening FreeCAD and clicking **Edit | Preferences | General | Macro** and looking under **Macro path**.
+
+```
+cd /home/<username>/.FreeCAD/Macro
+git clone https://github.com/inatic/freecad-truss truss
+```
+
 # FREECAD
 
 The FreeCAD application itself provides core functionality like interaction with documents, display of document structure in the tree view, visualization of objects in the 3D view window... The application builds upon a number of key libraries to provide this functionality:
