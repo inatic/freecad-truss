@@ -1,3 +1,5 @@
+**The code in this repository is a work in progress and far from complete**
+
 The following describes a construction technique that uses timber beams and basic joinery techniques (e.g. mortise and tenon) to build complex structures. The design starts from a mesh of interconnected lines that serves as the basis for both the beams and the joinery features used to connect them. Machining instructions are then generated based on the features of each beam. Development is done in [FreeCAD][freecad], an open-source CAD/CAM package that offers a Python interface for scripting. A Python console (available under **View | Panels | Python Console**) offers direct interaction with the application. Code is stored in the FreeCAD `Macro` directory, the location of which can be found under `FreeCAD | Preferences | General | Macro`.
 
 # INSTALLATION
